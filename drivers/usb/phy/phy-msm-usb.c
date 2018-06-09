@@ -3827,23 +3827,23 @@ static int otg_power_set_property_usb(struct power_supply *psy,
 		switch (psy->type) {
 		case POWER_SUPPLY_TYPE_USB:
 			motg->chg_type = USB_SDP_CHARGER;
-			motg->voltage_max = MICRO_5V ;
+			motg->voltage_max = MICRO_5V;
 			motg->current_max = SDP_CURRENT_UA;
 			break;
 		case POWER_SUPPLY_TYPE_USB_DCP:
 			motg->chg_type = USB_DCP_CHARGER;
-			motg->voltage_max = MICRO_5V ;
+			motg->voltage_max = MICRO_5V;
 			motg->current_max = DCP_CURRENT_UA;
 			break;
 		case POWER_SUPPLY_TYPE_USB_HVDCP:
 			motg->chg_type = USB_DCP_CHARGER;
-			motg->voltage_max = MICRO_9V ;
+			motg->voltage_max = MICRO_9V;
 			motg->current_max = HVDCP_CURRENT_UA;
 			msm_otg_notify_charger(motg, hvdcp_max_current);
 			break;
 		case POWER_SUPPLY_TYPE_USB_CDP:
 			motg->chg_type = USB_CDP_CHARGER;
-			motg->voltage_max = MICRO_5V ;
+			motg->voltage_max = MICRO_5V;
 			motg->current_max = CDP_CURRENT_UA;
 			break;
 		case POWER_SUPPLY_TYPE_USB_ACA:
