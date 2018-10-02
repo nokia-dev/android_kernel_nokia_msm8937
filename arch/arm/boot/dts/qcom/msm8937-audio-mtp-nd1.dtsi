@@ -88,3 +88,9 @@
 		acdbdir="ND1";
 	};
 };
+
+&pm8937_1 {
+	pm8937_cajon_dig: 8952_wcd_codec@f000 {
+	qcom,cdc-micbias-cfilt-mv = <2700000>;
+	};
+};
