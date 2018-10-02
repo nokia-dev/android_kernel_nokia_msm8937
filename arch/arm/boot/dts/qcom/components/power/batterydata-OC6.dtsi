@@ -1,0 +1,58 @@
+
+qcom,fih-oc6-4v35-2700mah-100k {
+	/* #3232071_FIH_OC6ebt_2700mAh_averaged_MasterSlave_Dec26th2017*/
+	qcom,max-voltage-uv = <4350000>;
+	qcom,v-cutoff-uv = <3400000>;
+	qcom,nom-batt-capacity-mah = <2700>;
+	qcom,batt-id-kohm = <100>;
+	qcom,battery-beta = <3435>;
+	qcom,battery-type = "OC6_SCUD_100K";
+	qcom,cool-bat-decidegc = <150>;
+	qcom,hot-bat-decidegc = <550>;
+	qcom,fg-chg-iterm-ma = <100>;
+	qcom,chg-rslow-comp-c1 = <3641079>;
+	qcom,chg-rslow-comp-c2 = <5768147>;
+	qcom,chg-rs-to-rslow = <1352646>;
+	qcom,chg-rslow-comp-thr = <0xAF>;
+	qcom,fastchg-current-ma = <1800>;
+	qcom,fastchg-current-comp = <700>;
+	qcom,fg-cc-cv-threshold-mv = <4340>;
+	qcom,checksum = <0xA358>;
+	qcom,gui-version = "PMI8950GUI - 2.0.0.16";
+	fih,log-info = <1>;
+	fih,turn-on-QC-log = <1>;
+	qcom,fg-profile-data = [
+		 07 88 C4 7D 
+		 2C 81 C2 76 
+		 3C 83 6D 72 
+		 05 7E 8F 7A 
+		 21 82 71 9A 
+		 E5 BD 61 CB 
+		 8C 11 ED 83 
+		 8D 7C 83 80 
+		 FC 75 2C 83 
+		 5E 7A 55 8C 
+		 8F 88 23 82 
+		 C7 9B 67 C4 
+		 EB D2 6A 0D 
+		 00 0B A8 5A 
+		 CE 6E 71 FD 
+		 F1 39 07 47 
+		 48 35 00 00 
+		 48 4E D3 40 
+		 51 48 00 00 
+		 00 00 00 00 
+		 00 00 00 00 
+		 9E 72 B4 70 
+		 94 8C EB 6D 
+		 DE 7C B1 71 
+		 00 6C 53 7A 
+		 1B 76 9E 69 
+		 0B 67 DB A2 
+		 29 EE 5B AF 
+		 5D A0 71 0C 
+		 28 00 FF 36 
+		 F0 11 30 03 
+		 00 00 00 0C 
+	];
+};

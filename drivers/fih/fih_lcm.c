@@ -655,6 +655,7 @@ struct {
 	{NULL}, },
 	LCM0_awer_status[] = {
 	{"AllHWList/LCM0/awer_status", &awer_status_operations},
+	{NULL},
 	#if 0
 	{NULL}, },
 	//Display-PowerPinControlPinAndInitCodeAPI-00+{_20150519
@@ -679,7 +680,6 @@ struct {
 	};
 	//Display-PowerPinControlPinAndInitCodeAPI-00+}_20150519
 	#else
-	{NULL},
 	};
 	#endif
 

@@ -1,0 +1,79 @@
+/*
+ * Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&soc {
+	tlmm: pinctrl@1000000 {
+		compatible = "qcom,msm8937-pinctrl";
+		reg = <0x1000000 0x300000>;
+		interrupts = <0 208 0>;
+		gpio-controller;
+		#gpio-cells = <2>;
+		interrupt-controller;
+		#interrupt-cells = <2>;
+
+		spi_7 {
+			spi_7_default: spi_7_default {
+				mux {
+					pins = "gpio85", "gpio87", "gpio88";
+					function = "blsp_spi7";
+				};
+
+				config {
+					pins = "gpio85", "gpio87", "gpio88";
+					drive-strength = <4>;
+					bias-disable;
+				};
+			};
+
+			spi_7_sleep: spi_7_sleep {
+				mux {
+					pins = "gpio85", "gpio87", "gpio88";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio85", "gpio87", "gpio88";
+					drive-strength = <4>;
+					bias-pull-down;
+				};
+			};
+
+			spi_7_miso_active: spi_7_miso_active {
+				mux {
+					pins = "gpio86";
+					function = "blsp_spi7";
+				};
+
+				config {
+					pins = "gpio86";
+					drive-strength = <2>;
+					bias-pull-down;
+				};
+			};
+
+			spi_7_miso_sleep: spi_7_miso_sleep {
+				mux {
+					pins = "gpio86";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio86";
+					drive-strength = <2>;
+					bias-pull-down;
+				};
+			};
+		};
+
+	};
+};

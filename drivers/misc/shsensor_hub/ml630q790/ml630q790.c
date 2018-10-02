@@ -111,7 +111,6 @@ static char * shub_get_active_sensor_name(int32_t type)
 #define DBG_LV_ERROR   0x40
 #define DBG_LV_DATA    0x80 
 #define DBG_LV_ALL     (0xffff)
-//int32_t dbg_level = DBG_LV_ALL;
 //int32_t dbg_level = DBG_LV_ERROR; // SHMDS_HUB_0104_08 mod
 int dbg_level = DBG_LV_ERROR;       // SHMDS_HUB_0104_08 mod
 #define DBG(lv, msg, ...) {                            \
@@ -1190,8 +1189,6 @@ static DEFINE_MUTEX(s_hostCmdMutex);
 static DEFINE_SPINLOCK(s_intreqData);
 
 // SHMDS_HUB_0402_01 add S
-#include <linux/wakelock.h>
-
 static int shub_wakelock_timeout = HZ;
 #ifdef CONFIG_ANDROID_ENGINEERING
 module_param(shub_wakelock_timeout, int, 0600);
@@ -2009,9 +2006,9 @@ static void shub_qos_init(void)
 {
     shub_wake_lock_num = 0;
     mutex_init(&qosMutex);
-//	shub_qos_cpu_dma_latency.type = PM_QOS_REQ_AFFINE_CORES;                    /* SHMDS_HUB_1102_03 del */
-//	shub_qos_cpu_dma_latency.cpus_affine.bits[0] = 0x0f; /* little cluster */   /* SHMDS_HUB_1102_03 del */
- 	pm_qos_add_request(&shub_qos_cpu_dma_latency, PM_QOS_CPU_DMA_LATENCY, PM_QOS_DEFAULT_VALUE);
+//  shub_qos_cpu_dma_latency.type = PM_QOS_REQ_AFFINE_CORES;                    /* SHMDS_HUB_1102_03 del */
+//  shub_qos_cpu_dma_latency.cpus_affine.bits[0] = 0x0f; /* little cluster */   /* SHMDS_HUB_1102_03 del */
+    pm_qos_add_request(&shub_qos_cpu_dma_latency, PM_QOS_CPU_DMA_LATENCY, PM_QOS_DEFAULT_VALUE);
     return;
 }
 
@@ -2126,7 +2123,7 @@ static void shub_dbg_collect_irq_log(uint16_t intreq)
         shub_dbg_cnt_acc++;
     }
 /* SHMDS_HUB_0120_01  SHMDS_HUB_0122_01 add S */
-//#ifdef CONFIG_BARO_SENSOR		/* SHMDS_HUB_2603_01 del */
+//#ifdef CONFIG_BARO_SENSOR     /* SHMDS_HUB_2603_01 del */
     if(intreq & INTREQ_BARO) {
         shub_dbg_cnt_baro++;
     }
@@ -3075,10 +3072,10 @@ static int32_t shub_update_time_flash_exe(ktime_t *time)
     uint64_t min_delay = MEASURE_MAX_US;
     uint64_t task_delay;
     uint64_t tmp;
-    ktime_t oldTime;
-    ktime_t newTime;
-    ktime_t cngTime;
-    ktime_t sub_time;
+    ktime_t oldTime = ktime_set(0, 0);
+    ktime_t newTime = ktime_set(0, 0);
+    ktime_t cngTime = ktime_set(0, 0);
+    ktime_t sub_time = ktime_set(0, 0);
     
     task_delay = (uint64_t)(s_micon_param.task_cycle[0] * 10);
     iCurrentLoggingEnable = atomic_read(&g_CurrentLoggingSensorEnable);
@@ -3201,7 +3198,7 @@ static int32_t shub_update_time_flash_exe(ktime_t *time)
 static void shub_update_time_flash(int32_t arg_iSensType)
 {
     int32_t ret;
-    ktime_t newTime;
+    ktime_t newTime = ktime_set(0, 0);
     
     ret = shub_update_time_flash_exe(&newTime);
     if(ret == 0){
@@ -3215,7 +3212,7 @@ static void shub_update_time_flash(int32_t arg_iSensType)
 static struct timespec event_time_to_offset(int32_t arg_iSensType,int32_t eventOffsetTime)
 {
     ktime_t baseTime = timespec_to_ktime(shub_get_timestamp());
-    ktime_t eventTime ;
+    ktime_t eventTime = ktime_set(0, 0);
     struct timespec ts;
     uint64_t sensorTaskCycle_ns;
     uint64_t micom_timer_base_clock_ns;
@@ -4237,7 +4234,7 @@ static int32_t shub_read_sensor_data(int32_t arg_iSensType)
 //static int32_t shub_hostcmd(const HostCmd *prm, HostCmdRes *res, uint8_t mode, uint8_t size)   // SHMDS_HUB_1001_01 mod
 static int32_t shub_hostcmd_exe(const HostCmd *prm, HostCmdRes *res, uint8_t mode, uint8_t size) // SHMDS_HUB_1001_01 mod
 {
-    int32_t ret;
+    int32_t ret = SHUB_RC_OK;
     uint8_t reg[20];
     uint8_t i;
 
@@ -4366,7 +4363,7 @@ ERROR:
 // SHMDS_HUB_1001_01 add S
 static int32_t shub_hostcmd(const HostCmd *prm, HostCmdRes *res, uint8_t mode, uint8_t size)
 {
-    int32_t ret;
+    int32_t ret = SHUB_RC_OK;
     int32_t i;
     
     DBG(DBG_LV_CMD, "%s : cmd=0x%04x \n", __func__, prm->cmd.u16); /* SHMDS_HUB_0701_06 add */
@@ -4489,7 +4486,7 @@ static irqreturn_t shub_irq_handler(int32_t irq, void *dev_id)
         shub_wake_lock_end(&shub_int_wake_lock);    // SHMDS_HUB_0402_01 add
         ENABLE_IRQ;
     }
-    shub_dbg_cnt_irq++;								// SHMDS_HUB_0701_03 add
+    shub_dbg_cnt_irq++;                             // SHMDS_HUB_0701_03 add
 
     shub_wake_lock_end(&shub_irq_wake_lock);        // SHMDS_HUB_0402_01 add
     return IRQ_HANDLED;
@@ -4511,7 +4508,7 @@ static void shub_int_work_func(struct work_struct *work)
 
     intreq = (uint16_t)(err_intreq[2] | (err_intreq[3] << 8));
 
-    shub_dbg_collect_irq_log(intreq);				// SHMDS_HUB_0701_03 add
+    shub_dbg_collect_irq_log(intreq);               // SHMDS_HUB_0701_03 add
 
 /* SHMDS_HUB_3301_01 mod S */
     if((intreq == 0) || (((intreq & ~INTREQ_MASK) != 0) && (intreq != INTREQ_ERROR) && (intreq != INTREQ_WATCHDOG))){
@@ -4630,7 +4627,9 @@ static void shub_int_acc_work_func(struct work_struct *work)
     int32_t rideInfo[7];        // SHMDS_HUB_0209_02 add
     bool sendInfo;              // SHMDS_HUB_0209_02 add
     uint16_t rdata[2];          /* SHMDS_HUB_1701_01 add */
+#ifdef SHUB_SW_PROX_CHECKER     // SHMDS_HUB_1701_17 mod
     int err;                    /* SHMDS_HUB_1701_14 add */
+#endif /* SHUB_SW_PROX_CHECKER */   // SHMDS_HUB_1701_17 mod
     int prox_data = 7;          /* SHMDS_HUB_1701_14 add */
     uint8_t pickup_mask = 0xFF; /* SHMDS_HUB_1702_01 add */
 
@@ -4726,6 +4725,7 @@ static void shub_int_acc_work_func(struct work_struct *work)
 #ifdef SHUB_SW_PICKUP_ALGO_03 /* SHMDS_HUB_1702_01 add */
         pickup_mask &= ~SHUB_PICKUP_ENABLE_ALGO_03;
 #endif
+#ifdef SHUB_SW_PROX_CHECKER     // SHMDS_HUB_1701_17 mod
         if((shub_pickup_setflg & pickup_mask) != SHUB_PICKUP_ENABLE_PARAM_LEVEL) {
             err = shub_prox_distance(&prox_data);
             if(err < 0) {
@@ -4733,6 +4733,7 @@ static void shub_int_acc_work_func(struct work_struct *work)
                 prox_data = 7;
             }
         }
+#endif /* SHUB_SW_PROX_CHECKER */   // SHMDS_HUB_1701_17 mod
 /* SHMDS_HUB_1701_15 mod E */
         if(prox_data == 7) {
             shub_input_report_exif_pickup_det();
@@ -7380,7 +7381,7 @@ static int32_t shub_activate_exec(int32_t arg_iSensType, int32_t arg_iEnable)
     int32_t iCurrentSensorEnable_tmp = iCurrentSensorEnable;
     int32_t iCurrentLoggingEnable = atomic_read(&g_CurrentLoggingSensorEnable);
     uint32_t enable_sensor;
-    uint32_t enable_sensor_acc;			/* SHMDS_HUB_0313_01 add */
+    uint32_t enable_sensor_acc;         /* SHMDS_HUB_0313_01 add */
     uint8_t setCal = 0;
     uint32_t enableGyro = 0;
     uint32_t waitFusion = 0;
@@ -8762,8 +8763,8 @@ int32_t shub_init_param( void )
         cmd.cmd.u16 = HC_GYRO_SET_CALIB;
         cmd.prm.u8[0] = 0x4C;
         cmd.prm.u8[1] = 0x1D;
-        cmd.prm.u8[2] = 0x04;
-        cmd.prm.u8[3] = 0x29;
+        cmd.prm.u8[2] = 0xA8;  /* SHMDS_HUB_0354_01 mod (0x04->0xA8) */
+        cmd.prm.u8[3] = 0x61;  /* SHMDS_HUB_0354_01 mod (0x29->0x61) */
         ret = shub_hostcmd(&cmd, &res, EXE_HOST_ALL, 4);
         if((SHUB_RC_OK != ret) || (0 != res.err.u16)) {
             shub_set_error_code(RESU16_SHUB_ERR_CODE(cmd,res)); /* SHMDS_HUB_0322_01 add */
@@ -8883,7 +8884,7 @@ int32_t shub_init_param( void )
     }
 /* SHMDS_HUB_0201_01 mod E */
     
-    shub_dbg_clr_irq_log();				// SHMDS_HUB_0701_03 add
+    shub_dbg_clr_irq_log();             // SHMDS_HUB_0701_03 add
 
     shub_mot_still_enable_flag = false; /* SHMDS_HUB_0332_01 add */
 
@@ -9832,7 +9833,7 @@ int32_t shub_set_delay(int32_t arg_iSensType, int32_t delay)
 /* SHMDS_HUB_0313_01 add E */
 /* SHMDS_HUB_0206_03 mod S */
 //        s_sensor_delay_us.acc = delay;
-//        s_sensor_delay_us.acc = SHUB_MIN(shub_get_exif_delay_ms() * 1000, delay);		/* SHMDS_HUB_0313_01 del */
+//        s_sensor_delay_us.acc = SHUB_MIN(shub_get_exif_delay_ms() * 1000, delay);     /* SHMDS_HUB_0313_01 del */
 /* SHMDS_HUB_0206_03 mod E */
     }else if(arg_iSensType & SHUB_ACTIVE_GYRO){
         s_sensor_delay_us.gyro = delay;
@@ -9873,7 +9874,7 @@ int32_t shub_set_delay(int32_t arg_iSensType, int32_t delay)
 /* SHMDS_HUB_0313_01 add E */
 /* SHMDS_HUB_0206_03 mod S */
 //        s_sensor_delay_us.acc = delay;
-//        s_sensor_delay_us.acc = SHUB_MIN(delay, s_sensor_delay_us.acc);		/* SHMDS_HUB_0313_01 del */
+//        s_sensor_delay_us.acc = SHUB_MIN(delay, s_sensor_delay_us.acc);       /* SHMDS_HUB_0313_01 del */
 /* SHMDS_HUB_0206_03 mod E */
 /* SHMDS_HUB_0201_01 add E */
     }
@@ -11507,6 +11508,7 @@ REGIST_ERR:
         destroy_workqueue(accsns_wq_int);
         accsns_wq_int = NULL;
     }
+
     return 0;
 
 }
@@ -11560,6 +11562,8 @@ static int32_t __init shub_init(void)
 {
     int ret;
     
+    DBG(DBG_LV_ERROR, "shub_init start\n");
+    
 #ifdef CONFIG_HOSTIF_SPI
     ret = shub_spi_init();
 #endif
@@ -11585,6 +11589,7 @@ static int32_t __init shub_init(void)
     ret = shub_devori_init();
     ret = shub_diag_init();
     
+    DBG(DBG_LV_ERROR, "shub_init end\n");
     return ret;
 }
 

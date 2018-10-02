@@ -482,10 +482,12 @@ static ssize_t shdtvspi_read(struct file* filp, char* buf, size_t count, loff_t*
 	struct shdtv_spi_drv *ctrl;
 	ssize_t readsize;
 
+#if 0
 	if (spi_sem == NULL) {
 		readsize = 0;
 		return readsize;
 	}
+#endif
 
 //	printk("shdtvspi_read() start \n");
 

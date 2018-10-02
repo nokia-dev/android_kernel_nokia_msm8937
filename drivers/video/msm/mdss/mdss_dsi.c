@@ -85,6 +85,22 @@ int SendCABCBeforeInit = 0;
 #define BBOX_LCM_OEM_FUNCTIONS_FAIL	do {printk("BBox;%s: LCM OEM functions (CE or CT or BLF or CABC) functions fail!\n", __func__); printk("BBox::UEC;0::8\n");} while (0);
 //Display-BBox-03+}_20161028
 
+//FIHTDC - gatycclu - OC6 - Show panel color data{
+#define PANEL_REG_ADDR_LEN 8					//SW4-HL-Display-ShowLCMAndBacklightStatus-00+_20160304
+static char color_data_reg[2] = {0xE8, 0x00};	//SW4-HL-Display-ShowLCMAndBacklightStatus-00+_20160304
+void fih_get_panel_color_data(struct mdss_dsi_ctrl_pdata *ctrl_pdata, char* color_data)
+{
+	char *rx_buf;
+
+	rx_buf = kzalloc(PANEL_REG_ADDR_LEN, GFP_KERNEL);
+	mdss_dsi_panel_cmd_read(ctrl_pdata, color_data_reg[0], color_data_reg[1],
+						NULL, rx_buf, 3);
+	pr_info("%s: LCM E8h = 0x%x,0x%x, 0x%x\n", __func__, rx_buf[0], rx_buf[1], rx_buf[2]);
+	sprintf(color_data, "0x%x,0x%x,0x%x\n", rx_buf[0], rx_buf[1], rx_buf[2]);
+	kfree(rx_buf);
+}
+//FIHTDC - gatycclu - OC6 - Show panel color data}
+
 static void mdss_dsi_pm_qos_add_request(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 {
 	struct irq_info *irq_info;
@@ -386,7 +402,7 @@ static int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
 				if (mdss_dsi_pinctrl_set_state(ctrl_pdata, false))
 					pr_debug("reset disable: pinctrl not enabled\n");
 
-				mdelay(5);
+				mdelay(3);
 
 				ret = msm_dss_enable_vreg(
 					ctrl_pdata->panel_power_data.vreg_config,

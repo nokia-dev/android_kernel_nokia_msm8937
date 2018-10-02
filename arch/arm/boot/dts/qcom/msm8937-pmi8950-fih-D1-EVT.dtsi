@@ -31,6 +31,7 @@
 &pmi8950_fg {
 	qcom,battery-data = <&nd1_batterydata>;
 	fih,high-low-comp-set = <1>;
+	qcom,vbat-estimate-diff-mv = <300>;
 };
 
 &pmi8950_charger {

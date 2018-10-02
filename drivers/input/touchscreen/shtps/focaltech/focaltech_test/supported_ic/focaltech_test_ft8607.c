@@ -153,7 +153,7 @@ boolean FT8607_StartTest()
     //unsigned char bClbResult = 0;
     int iItemCount=0, i = 0;
 
-
+        FTS_TEST_ERROR("!!!!!!!!!!!!!!![focal] FT8607_StartTest.!!!!!!!!!!!!!!!!!");
     //--------------1. Init part
     if (InitTest() < 0)
     {
@@ -350,7 +350,7 @@ unsigned char FT8607_TestItem_RawDataTest(bool * bTestResult)
 //    bIncludeKey = g_stCfg_FT8607_BasicThreshold.bRawDataTest_VKey_Check;
 
         if (NULL == pfile)
-            pfile = filp_open("/data/misc/touch/touch_data.txt", O_TRUNC|O_CREAT|O_RDWR, 0664);
+            pfile = filp_open("/data/misc/touch/touch_data.txt", O_TRUNC|O_CREAT|O_RDWR, 0666);
         if (IS_ERR(pfile)){
             pr_err("[focal] error occured while opening file /data/misc/touch/touch_data.txt.\n");
             return -1;

@@ -24,7 +24,9 @@
 #include <asm/uaccess.h> 
 #include <misc/shub_driver.h>          // SHMDS_HUB_0207_01 add
 #if 0
+#ifdef CONFIG_TOUCHSCREEN_SHTPS
 #include <linux/input/shtps_dev.h>      /* SHMDS_HUB_3702_01 add */
+#endif /* CONFIG_TOUCHSCREEN_SHTPS */
 #include <linux/qpnp/qpnp-haptic.h>     /* SHMDS_HUB_3702_01 add */
 #include <sharp/shaudio_sdm660.h>       /* SHMDS_HUB_3702_01 add */
 #endif
@@ -2060,6 +2062,7 @@ void shub_sensor_rep_input_exif(struct seq_file *s)
 
 #if 0
 /* SHMDS_HUB_3702_01 add S */
+#ifdef CONFIG_TOUCHSCREEN_SHTPS
 static int shub_touchpanel_pedometer_handler_func(struct notifier_block *nb,
                                                   unsigned long on, void *unused)
 {
@@ -2074,6 +2077,7 @@ static int shub_touchpanel_pedometer_handler_func(struct notifier_block *nb,
 static struct notifier_block shub_touchpanel_pedometer_handler = {
     .notifier_call = shub_touchpanel_pedometer_handler_func,
 };
+#endif /* CONFIG_TOUCHSCREEN_SHTPS */
 
 static int shub_vibration_pedometer_handler_func(struct notifier_block *nb,
                                                   unsigned long on, void *unused)
@@ -2208,11 +2212,13 @@ int32_t shub_probe_exif(struct platform_device *pfdev)
 
 #if 0
 /* SHMDS_HUB_3702_01 add S */
+#ifdef CONFIG_TOUCHSCREEN_SHTPS
     ret = shtps_api_register_notifier_touchevent(&shub_touchpanel_pedometer_handler);
     if (ret) {
         printk("%s: touchpanel notifier register failed\n", __func__);
         goto out_driver;
     }
+#endif /* CONFIG_TOUCHSCREEN_SHTPS */
 
     ret = qpnp_hap_register_notifier(&shub_vibration_pedometer_handler);
     if (ret) {
@@ -2249,7 +2255,9 @@ int32_t shub_remove_exif(struct platform_device *pfdev)
 
 #if 0
 /* SHMDS_HUB_3702_01 add S */
+#ifdef CONFIG_TOUCHSCREEN_SHTPS
     shtps_api_unregister_notifier_touchevent(&shub_touchpanel_pedometer_handler);
+#endif /* CONFIG_TOUCHSCREEN_SHTPS */
 
     qpnp_hap_unregister_notifier(&shub_vibration_pedometer_handler);
 

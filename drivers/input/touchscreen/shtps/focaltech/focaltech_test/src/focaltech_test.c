@@ -138,7 +138,7 @@ static int fts_test_get_ini_size(char *config_name)
 
     memset(filepath, 0, sizeof(filepath));
 
-    sprintf(filepath, "%s%s", FTS_INI_FILE_PATH, config_name);
+    sprintf(filepath, "%s%s", "/system/vendor/etc/", "FT8607_TEST.ini");
 
     if (NULL == pfile)
         pfile = filp_open(filepath, O_RDONLY, 0);
@@ -173,7 +173,7 @@ static int fts_test_read_ini_data(char *config_name, char *config_buf)
     FTS_TEST_FUNC_ENTER();
 
     memset(filepath, 0, sizeof(filepath));
-    sprintf(filepath, "%s%s", FTS_INI_FILE_PATH, config_name);
+    sprintf(filepath, "%s%s", "/system/vendor/etc/", "FT8607_TEST.ini");
     if (NULL == pfile)
     {
         pfile = filp_open(filepath, O_RDONLY, 0);
@@ -214,7 +214,7 @@ static int fts_test_save_test_data(char *file_name, char *data_buf, int iLen)
     if (NULL == pfile)
     {
 
-        pfile = filp_open(filepath, O_TRUNC|O_CREAT|O_RDWR, 0600);
+        pfile = filp_open(filepath, O_TRUNC|O_CREAT|O_RDWR, 0666);
     }
     if (IS_ERR(pfile))
     {
@@ -302,6 +302,7 @@ static int fts_test_entry(char *ini_file_name)
 
     FTS_TEST_FUNC_ENTER();
     FTS_TEST_DBG("ini_file_name:%s.", ini_file_name);
+        FTS_TEST_DBG("FTS_CHIP_TEST_TYPE:%x.", FTS_CHIP_TEST_TYPE);
     /*Used to obtain the test data stored in the library, pay attention to the size of the distribution space.*/
     FTS_TEST_DBG("Allocate memory, size: %d", FTS_TEST_BUFFER_SIZE);
     testdata = fts_malloc(FTS_TEST_BUFFER_SIZE);
@@ -540,7 +541,7 @@ int fts_test_exit(struct i2c_client *client)
 void touch_selftest(void)
 {
     char fwname[128];
-    struct i2c_client *client = fts_i2c_client;
+    struct i2c_client *client = shtps_fts_i2c_client;
 
     FTS_TEST_FUNC_ENTER();
 

@@ -29,7 +29,6 @@
 #include <linux/fs.h>
 #include <linux/ioctl.h>
 #include <linux/delay.h>
-#include <linux/wakelock.h>
 
 #include <linux/module.h>
 #include <linux/input.h>
@@ -144,6 +143,9 @@ static int32_t spi_probe( struct spi_device *client )
     int rc;
     struct device_node *np = client->dev.of_node;
     u32 temp_val;
+
+    printk("[shub] spi_probe start\n");
+
     rc = of_property_read_u32(np, "shub,shub_acc_axis_val", &temp_val);
     if (rc) {
         printk("[shub]Unable to read. shub,shub_acc_axis_val\n");

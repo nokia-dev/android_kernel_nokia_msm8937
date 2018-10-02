@@ -1481,7 +1481,8 @@ void fih_get_panel_status(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 
 	if( strstr(saved_command_line, "androidboot.device=MA3")!=NULL
 			 || strstr(saved_command_line, "androidboot.device=MS3")!=NULL
-			 || strstr(saved_command_line, "androidboot.device=MF3")!=NULL )
+			 || strstr(saved_command_line, "androidboot.device=MF3")!=NULL
+			 || strstr(saved_command_line, "androidboot.device=OC6")!=NULL )
 	{
 		{
 			rx_buf = kzalloc(PANEL_REG_ADDR_LEN, GFP_KERNEL);
@@ -2811,6 +2812,8 @@ static bool mdss_dsi_cmp_panel_reg_v2(struct mdss_dsi_ctrl_pdata *ctrl)
 
 	for (j = 0; j < ctrl->groups; ++j) {
 		for (i = 0; i < len; ++i) {
+			pr_debug("%s: [LCM-ESD] panel status = 0x%x (0x%x)\n", __func__,
+				 ctrl->return_buf[i], ctrl->status_value[group + i]);
 			if (ctrl->return_buf[i] !=
 				ctrl->status_value[group + i])
 				break;

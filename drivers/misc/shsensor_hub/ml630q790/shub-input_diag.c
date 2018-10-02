@@ -200,10 +200,19 @@ module_param(shub_diag_log, int, 0600);
 #define LSM6DS3_ACC_GYRO_STATUS_REG     (0x1E)
 #define SELF_TEST_ACC_READTIMES (5)
 #define SELF_TEST_GYRO_READTIMES (5)
+
+/* SHMDS_HUB_0103_32 mod S */
+#ifdef CONFIG_ACC_U2DH
+#define CHECK_ACC_REG (0x08)
+#define ACC_MIN_ST (1088)
+#define ACC_MAX_ST (23040)
+#else
 #define CHECK_ACC_REG (1)
-#define CHECK_GYRO_REG (2)
 #define ACC_MIN_ST (1470)
 #define ACC_MAX_ST (27870)
+#endif
+/* SHMDS_HUB_0103_32 mod E */
+#define CHECK_GYRO_REG (2)
 #define GYRO_MIN_ST (2143)
 #define GYRO_MAX_ST (10000)
 /* SHMDS_HUB_0103_14 add E */
@@ -232,6 +241,13 @@ module_param(shub_diag_log, int, 0600);
 /* SHMDS_HUB_0120_01 add E */
 
 #ifdef CONFIG_ACC_U2DH /* SHMDS_HUB_0103_12 SHMDS_HUB_2901_01 */
+/* SHMDS_HUB_0103_32 add S */
+#define LIS2DH_CTRL_REG1                (0x20)
+#define LIS2DH_CTRL_REG2                (0x21)
+#define LIS2DH_CTRL_REG3                (0x22)
+#define LIS2DH_CTRL_REG4                (0x23)
+#define LIS2DH_STATUS_REG               (0x27)
+/* SHMDS_HUB_0103_32 add E */
 #define LIS2DH_OUT_X_L                  (0x28)
 #define LIS2DH_OUT_X_H                  (0x29)
 #define LIS2DH_OUT_Y_L                  (0x2A)
@@ -240,7 +256,21 @@ module_param(shub_diag_log, int, 0600);
 #define LIS2DH_OUT_Z_H                  (0x2D)
 #endif
 
+/* SHMDS_HUB_2901_02 mod S */
+#ifdef CONFIG_ACC_U2DH
+#define SHUB_ACC_SHIFT_VAL     3  /* SHMDS_HUB_3501_01 add */
+#else
 #define SHUB_ACC_SHIFT_VAL     2
+#endif
+/* SHMDS_HUB_2901_02 mod E */
+
+/* SHMDS_HUB_0103_32 add S */
+#ifdef CONFIG_ACC_U2DH
+#define SELF_TEST_ACC_SLEEPTIMES (90)
+#else
+#define SELF_TEST_ACC_SLEEPTIMES (200)
+#endif
+/* SHMDS_HUB_0103_32 add E */
 
 struct yas_cal {
     int8_t a2, a3, a4, a6, a7, a8;
@@ -662,6 +692,32 @@ static int shub_diag_acc_self_test_initialize(void)
     int ret;
     uint8_t setData;
 
+/* SHMDS_HUB_0103_32 mod S */
+#ifdef CONFIG_ACC_U2DH
+    setData = 0x00;
+    ret = shub_diag_accGyroSensorWriteSendCmd(LIS2DH_CTRL_REG2, setData);
+    if(ret != 0) {
+        return -1;
+    }
+    
+    setData = 0x00;
+    ret = shub_diag_accGyroSensorWriteSendCmd(LIS2DH_CTRL_REG3, setData);
+    if(ret != 0) {
+        return -1;
+    }
+    
+    setData = 0x81;
+    ret = shub_diag_accGyroSensorWriteSendCmd(LIS2DH_CTRL_REG4, setData);
+    if(ret != 0) {
+        return -1;
+    }
+    
+    setData = 0x57;
+    ret = shub_diag_accGyroSensorWriteSendCmd(LIS2DH_CTRL_REG1, setData);
+    if(ret != 0) {
+        return -1;
+    }
+#else
 	/* CTRL1 setting */
 	setData = 0x30;
 	ret = shub_diag_accGyroSensorWriteSendCmd(LSM6DS3_ACC_GYRO_CTRL1_XL, setData);
@@ -731,6 +787,8 @@ static int shub_diag_acc_self_test_initialize(void)
     if(ret != 0) {
         return -1;
     }
+#endif
+/* SHMDS_HUB_0103_32 mod E */
 
     return 0;
 }
@@ -1143,25 +1201,6 @@ static int shub_diag_gyro_mode_change(int mode)
     return 0;
 }
 
-/* acc measure one time */
-static int shub_diag_acc_measure(int16_t* accData)
-{
-    int ret;
-    uint8_t mesData[9];
-
-    memset(mesData, 0, sizeof(mesData));
-    ret = shub_diag_sensorMultiReadSendCmd(LSM6DS3_ACC_GYRO_OUT_X_L_XL, mesData, LSM6DS3_SLAVE_ADDRESS, 6);
-    if((ret != 0) || (mesData[0] != 0)) {
-        printk("[shub]%s measurement read err.ret=%d %d\n", __func__, ret, mesData[0]);
-        return -1;
-    }
-    accData[0] = (int16_t)( ((uint16_t)mesData[2] << 8) | (uint16_t)mesData[1]);
-    accData[1] = (int16_t)( ((uint16_t)mesData[4] << 8) | (uint16_t)mesData[3]);
-    accData[2] = (int16_t)( ((uint16_t)mesData[6] << 8) | (uint16_t)mesData[5]);
-
-    return 0;
-}
-
 #ifdef CONFIG_ACC_U2DH /* SHMDS_HUB_0103_12 SHMDS_HUB_2901_01 */
 static int shub_diag_lis2dh_acc_measure(int16_t* accData)
 {
@@ -1205,6 +1244,33 @@ static int shub_diag_lis2dh_acc_measure(int16_t* accData)
     return 0;
 }
 #endif
+
+/* acc measure one time */
+static int shub_diag_acc_measure(int16_t* accData)
+{
+    int ret;
+    
+#ifdef CONFIG_ACC_U2DH /* SHMDS_HUB_0103_12 SHMDS_HUB_2901_01 */
+    /* acc measure one time */
+    ret = shub_diag_lis2dh_acc_measure(accData);
+    if(ret != 0) {
+        return -1;
+    }
+#else
+    uint8_t mesData[9];
+
+    memset(mesData, 0, sizeof(mesData));
+    ret = shub_diag_sensorMultiReadSendCmd(LSM6DS3_ACC_GYRO_OUT_X_L_XL, mesData, LSM6DS3_SLAVE_ADDRESS, 6);
+    if((ret != 0) || (mesData[0] != 0)) {
+        printk("[shub]%s measurement read err.ret=%d %d\n", __func__, ret, mesData[0]);
+        return -1;
+    }
+    accData[0] = (int16_t)( ((uint16_t)mesData[2] << 8) | (uint16_t)mesData[1]);
+    accData[1] = (int16_t)( ((uint16_t)mesData[4] << 8) | (uint16_t)mesData[3]);
+    accData[2] = (int16_t)( ((uint16_t)mesData[6] << 8) | (uint16_t)mesData[5]);
+#endif
+    return 0;
+}
 
 /* gyro measure one time */
 static int shub_diag_gyro_measure(int16_t* gyroData)
@@ -1613,22 +1679,32 @@ static int shub_diag_acc_self_test_check(int16_t* accData)
 		return -1;
 	}
 	
-	msleep(200);	
+/* SHMDS_HUB_0103_32 mod S */
+	msleep(SELF_TEST_ACC_SLEEPTIMES);
 	
 	ret = shub_diag_acc_self_test_average(out_nost);
 	if(ret){
 		printk("[%d][shub]%s  test_average  nost  error\n", __LINE__, __func__);
 		return -1;
 	}
-		
+	
+#ifdef CONFIG_ACC_U2DH
+    setData = 0x85;
+    ret = shub_diag_accGyroSensorWriteSendCmd(LIS2DH_CTRL_REG4, setData);
+    if(ret != 0) {
+        return -1;
+    }
+#else
 	setData = 0x01;
 	ret = shub_diag_accGyroSensorWriteSendCmd(LSM6DS3_ACC_GYRO_CTRL5_C, setData);
 	if(ret != 0) {
         return -1;
     }
+#endif
     
-    msleep(200);
-		
+    msleep(SELF_TEST_ACC_SLEEPTIMES);
+/* SHMDS_HUB_0103_32 mod E */
+	
 	ret = shub_diag_acc_self_test_average(out_st);
 	if(ret){
 		printk("[%d][shub]%s  test_average  st  error\n", __LINE__, __func__);
@@ -1669,6 +1745,22 @@ static int shub_diag_acc_self_test_check(int16_t* accData)
 	DBG_DIAG_IO("%s min(ST_Y)=%d, |OUTY_ST-OUTY_NOST|=%d, max(ST_Y)=%d\n", __func__, ACC_MIN_ST, accData[1], ACC_MAX_ST );
 	DBG_DIAG_IO("%s min(ST_Z)=%d, |OUTZ_ST-OUTZ_NOST|=%d, max(ST_Z)=%d\n", __func__, ACC_MIN_ST, accData[2], ACC_MAX_ST );
 	
+/* SHMDS_HUB_0103_32 mod S */
+#ifdef CONFIG_ACC_U2DH
+    /* CTRL_REG1 setting */
+    dis_ret = shub_diag_accGyroSensorWriteSendCmd(LIS2DH_CTRL_REG1, 0x00 );
+    if(dis_ret != 0) {
+        printk("[%d][shub]%s  CTRL_REG1  disable_error\n", __LINE__, __func__);
+        return dis_ret;
+    }
+
+    /* LIS2DH CTRL_REG4 disable */
+    dis_ret = shub_diag_accGyroSensorWriteSendCmd(LIS2DH_CTRL_REG4, 0x01);
+    if(dis_ret != 0) {
+        printk("[%d][shub]%s CTRL_REG4 disable_error\n", __LINE__, __func__);
+        return dis_ret;
+    }
+#else
 	/* CTRL1 setting */
 	dis_ret = shub_diag_accGyroSensorWriteSendCmd(LSM6DS3_ACC_GYRO_CTRL1_XL, 0x00 );
 	if(dis_ret != 0) {
@@ -1682,12 +1774,16 @@ static int shub_diag_acc_self_test_check(int16_t* accData)
         printk("[%d][shub]%s CTRL5 disable_error\n", __LINE__, __func__);
         return dis_ret;
     }
+#endif
     
+#ifndef CONFIG_ACC_U2DH
     dis_ret = shub_diag_acc_initialize();
 	if(dis_ret != 0){
 		printk("[%d][shub]%s  end_initialize  err\n", __LINE__, __func__);
 		return dis_ret;
 	}
+#endif
+/* SHMDS_HUB_0103_32 mod E */
     return ret;
 }
 
@@ -1702,9 +1798,13 @@ static int shub_diag_acc_self_test_average(int16_t data[][3])
 	memset(sumData, 0, sizeof(sumData));
 		
 	while(check_init_flg){
-		
+/* SHMDS_HUB_0103_32 mod S */
+#ifdef CONFIG_ACC_U2DH		
+        ret = shub_diag_accGyroSensorReadSendCmd(LIS2DH_STATUS_REG,readData);
+#else		
 		ret = shub_diag_accGyroSensorReadSendCmd(LSM6DS3_ACC_GYRO_STATUS_REG,readData);
-		
+#endif
+/* SHMDS_HUB_0103_32 mod E */
 		if(CHECK_ACC_REG & readData[0]){
 			ret = shub_diag_acc_measure(data[acc_cnt]);
 			if(ret){
@@ -1716,9 +1816,13 @@ static int shub_diag_acc_self_test_average(int16_t data[][3])
 	}
 	
 	while(acc_cnt != SELF_TEST_ACC_READTIMES){
-		
+/* SHMDS_HUB_0103_32 mod S */
+#ifdef CONFIG_ACC_U2DH		
+        ret = shub_diag_accGyroSensorReadSendCmd(LIS2DH_STATUS_REG,readData);
+#else
 		ret = shub_diag_accGyroSensorReadSendCmd(LSM6DS3_ACC_GYRO_STATUS_REG,readData);
-		
+#endif
+/* SHMDS_HUB_0103_32 mod E */
 		if(CHECK_ACC_REG & readData[0]){
 			ret = shub_diag_acc_measure(data[acc_cnt]);
 			if(ret){
@@ -2564,12 +2668,14 @@ static long shub_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
             {
                 struct IoctlDiagRes res;
                 memset(&res, 0, sizeof(struct IoctlDiagRes));
+#ifndef CONFIG_ACC_U2DH /* SHMDS_HUB_0103_12 SHMDS_HUB_2901_01 */
                 if(!initial_acc_flg){
                     res.rtn = shub_diag_acc_initialize();
                     if(res.rtn == 0){
                         initial_acc_flg = 1;
                     }
                 }
+#endif
                 if(res.rtn == 0){
                     res.rtn = shub_diag_acc_measure(&res.accGyroData[0]);
                 }
@@ -2624,7 +2730,9 @@ static long shub_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
             break;
 /* SHMDS_HUB_0103_06 add S */
         case SHUB_DIAG_ACC_SET_CAL:
-/*            {
+#if 0
+            {
+/* SHMDS_HUB_3501_01 mod S */
                 unsigned char flg = 0;
                 static sharp_smem_common_type *sh_smem_common;
                 struct IoctlDiagAccCalibration res;
@@ -2648,8 +2756,9 @@ static long shub_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
                         return -EFAULT;
                     }
                 }
+/* SHMDS_HUB_3501_01 mod E */
             }
-*/
+#endif
             break;
         case SHUB_DIAG_MAG_SET_CAL:
             {
@@ -2677,12 +2786,12 @@ static long shub_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
             break;
 /* SHMDS_HUB_0103_06 add E */
 /* SHMDS_HUB_0103_14 add S */
-		case SHUB_DIAG_MES_ACC_SELF_TEST:
+        case SHUB_DIAG_MES_ACC_SELF_TEST:
             {
-				struct IoctlDiagRes res;
+                struct IoctlDiagRes res;
                 DBG_DIAG_IO("ioctl(cmd = ACC_SELF_TEST)\n");
                 memset(&res, 0, sizeof(struct IoctlDiagRes));
-				
+                
                 res.rtn = shub_diag_acc_self_test_check(&res.accGyroData[0]);
                 
                 DBG_DIAG_IO("ioctl(cmd = ACC_SELF_TEST) : ret=%d, x=%d, y=%d, z=%d\n", 
@@ -2694,12 +2803,12 @@ static long shub_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
                 }
             }
             break;
-		case SHUB_DIAG_MES_GYRO_SELF_TEST:
+        case SHUB_DIAG_MES_GYRO_SELF_TEST:
             {
-				struct IoctlDiagRes res;
+                struct IoctlDiagRes res;
                 DBG_DIAG_IO("ioctl(cmd = GYRO_SELF_TEST)\n");
                 memset(&res, 0, sizeof(struct IoctlDiagRes));
-				
+                
                 res.rtn = shub_diag_gyro_self_test_check(&res.accGyroData[0]);
                 
                 DBG_DIAG_IO("ioctl(cmd = GYRO_SELF_TEST) : ret=%d, x=%d, y=%d, z=%d\n", 

@@ -104,7 +104,8 @@
 };
 
 &i2c_6 { /* BLSP2 QUP1 */
-	qcom_i2c_test@34 { //Slave driver and slave Address
+	qcom_i2c_test@37 { //Slave driver and slave Address
+		status = "disable";
 		compatible ="qcom,i2c-test";//Manufacture, model
 		reg = <0x37>; //Slave Address
 		/*
@@ -119,10 +120,6 @@
 		//qcom_i2c_test,irq-gpio = <&tlmm 61 0x00>; Pass a GPIO
 	};
 };
-
-
-
-
 
 &sdhc_1 {
 	/* device core power supply */

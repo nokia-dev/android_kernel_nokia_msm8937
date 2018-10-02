@@ -108,7 +108,7 @@
 #define WINFAC					1
 
 /* both als and ps interrupt are enabled */
-#define LTR557_INTERRUPT_SETTING	0x17
+#define LTR557_INTERRUPT_SETTING	0x15
 
 /* Any proximity distance change will wakeup SoC */
 #define LTR557_WAKEUP_ANY_CHANGE	0xff
@@ -209,6 +209,9 @@ static int als_gain_table[] = {1, 3, 6, 9, 18};
 static int als_mrr_table[] = { 25, 50, 100, 500, 1000, 2000, 2000};
 /* PS measurement repeat rate in ms */
 static int ps_mrr_table[] = { 0, 7, 13, 25, 50, 100, 200, 400};
+
+#define LTR557_ALS_REPEAT_RATE_DEFAULT 100
+#define LTR557_PS_REPEAT_RATE_DEFAULT 100
 
 /* Tuned for devices with rubber */
 static int ps_distance_table[] =  { 790, 337, 195, 114, 78, 62, 50 };
@@ -539,53 +542,65 @@ static int ltr557_dynamic_calibrate(struct ltr557_data *ltr)
 	}
 
 	noise = data_total / count;
-#if 1
-	if (noise < 100) {
-		ps_thd_val_high = noise + 100;
-		ps_thd_val_low  = noise + 50;
-	}
-	else if (noise < 200) {
-		ps_thd_val_high = noise + 150;
-		ps_thd_val_low  = noise + 60;
-	}
-	else if (noise < 300) {
-		ps_thd_val_high = noise + 150;
-		ps_thd_val_low  = noise + 60;
-	}
-	else if (noise < 400) {
-		ps_thd_val_high = noise + 150;
-		ps_thd_val_low  = noise + 60;
-	}
-	else if (noise < 600) {
-		ps_thd_val_high = noise + 180;
-		ps_thd_val_low  = noise + 90;
-	}
-	else if (noise < 1000) {
-		ps_thd_val_high = noise + 300;
-		ps_thd_val_low  = noise + 180;
-	}
-	else {
-		ps_thd_val_high = 1500;
-		ps_thd_val_low  = 1300;
-	}	
-#else
-	ps_thd_val_high = 150;
-	ps_thd_val_low  = 60;
-#endif
 
-	ps_data[0] = PS_LOW_BYTE(ps_thd_val_high);
-	ps_data[1] = PS_HIGH_BYTE(ps_thd_val_high);
-	ps_data[2] = PS_LOW_BYTE(ps_thd_val_low);
-	ps_data[3] = PS_HIGH_BYTE(ps_thd_val_low);
+	if (ltr->ps_cal == 0) {
+		if (noise < 100) {
+			ps_thd_val_high = noise + 100;
+			ps_thd_val_low  = noise + 50;
+		}
+		else if (noise < 200) {
+			ps_thd_val_high = noise + 150;
+			ps_thd_val_low  = noise + 60;
+		}
+		else if (noise < 300) {
+			ps_thd_val_high = noise + 150;
+			ps_thd_val_low  = noise + 60;
+		}
+		else if (noise < 400) {
+			ps_thd_val_high = noise + 150;
+			ps_thd_val_low  = noise + 60;
+		}
+		else if (noise < 600) {
+			ps_thd_val_high = noise + 180;
+			ps_thd_val_low  = noise + 90;
+		}
+		else if (noise < 1000) {
+			ps_thd_val_high = noise + 300;
+			ps_thd_val_low  = noise + 180;
+		}
+		else {
+			ps_thd_val_high = 1500;
+			ps_thd_val_low  = 1300;
+		}
+
+		ps_data[0] = PS_LOW_BYTE(ps_thd_val_high);
+		ps_data[1] = PS_HIGH_BYTE(ps_thd_val_high);
+		ps_data[2] = PS_LOW_BYTE(ps_thd_val_low);
+		ps_data[3] = PS_HIGH_BYTE(ps_thd_val_low);
 	
-	rc = regmap_bulk_write(ltr->regmap,
-			LTR557_REG_PS_THRES_UP_0, ps_data, 4);
-	if (rc) {
-		dev_err(&ltr->i2c->dev, "set up threshold failed\n");	
-	}
+		rc = regmap_bulk_write(ltr->regmap,
+				LTR557_REG_PS_THRES_UP_0, ps_data, 4);
+		if (rc) {
+			dev_err(&ltr->i2c->dev, "set up threshold failed\n");	
+		}
 
-	ltr->ps_thres_up = ps_thd_val_high;
-	ltr->ps_thres_low = ps_thd_val_low;
+		ltr->ps_thres_up = ps_thd_val_high;
+		ltr->ps_thres_low = ps_thd_val_low;
+
+		ltr->ps_cal = 1;
+	} else {
+		ps_data[0] = PS_LOW_BYTE(ltr->ps_thres_up);
+		ps_data[1] = PS_HIGH_BYTE(ltr->ps_thres_up);
+		ps_data[2] = PS_LOW_BYTE(ltr->ps_thres_low);
+		ps_data[3] = PS_HIGH_BYTE(ltr->ps_thres_low);
+	
+		rc = regmap_bulk_write(ltr->regmap,
+				LTR557_REG_PS_THRES_UP_0, ps_data, 4);
+		if (rc) {
+			dev_err(&ltr->i2c->dev, "set up threshold failed\n");	
+		}
+	}
+	
 	return noise;
 }
 
@@ -751,7 +766,6 @@ static int ltr557_calc_lux(struct ltr557_data *ltr, int alsdata, int gain, int a
 static int ltr557_process_data(struct ltr557_data *ltr, int als_ps, int ps_cali)
 {
 	int als_int_fac;
-	ktime_t	timestamp;
 	int rc = 0;
 
 	unsigned int tmp;
@@ -762,8 +776,6 @@ static int ltr557_process_data(struct ltr557_data *ltr, int als_ps, int ps_cali)
 	u8 ps_data[4];
 	int i;
 	int distance;
-
-	timestamp = ktime_get_boottime();
 
 	if (als_ps) { /* process als data */
 		/* Read data */
@@ -784,13 +796,7 @@ static int ltr557_process_data(struct ltr557_data *ltr, int als_ps, int ps_cali)
 		
 		if (lux != ltr->last_als) {
 			input_report_abs(ltr->input_light, ABS_MISC, lux);
-			input_event(ltr->input_light, EV_SYN, SYN_TIME_SEC,
-					ktime_to_timespec(timestamp).tv_sec);
-			input_event(ltr->input_light, EV_SYN, SYN_TIME_NSEC,
-					ktime_to_timespec(timestamp).tv_nsec);
 			input_sync(ltr->input_light);
-
-			ltr->last_als_ts = timestamp;
 		}
 
 		ltr->last_als = lux;
@@ -855,22 +861,16 @@ static int ltr557_process_data(struct ltr557_data *ltr, int als_ps, int ps_cali)
 		if (tmp > ltr->ps_thres_up)
 			distance = 0;	// near
 		else if (tmp < ltr->ps_thres_low)
-			distance = 6;	// far
+			distance = 7;	// far
 		else
-			distance = 6;
+			distance = 7;
 
 		if (ps_cali)
-			distance = 6;
+			distance = 7;
 
 		input_report_abs(ltr->input_proximity, ABS_DISTANCE,
 			distance);
-		input_event(ltr->input_proximity, EV_SYN, SYN_TIME_SEC,
-			ktime_to_timespec(timestamp).tv_sec);
-		input_event(ltr->input_proximity, EV_SYN, SYN_TIME_NSEC,
-			ktime_to_timespec(timestamp).tv_nsec);
 		input_sync(ltr->input_proximity);
-
-		ltr->last_ps_ts = timestamp;
 #else
 		if (distance != ltr->last_ps) {
 			input_report_abs(ltr->input_proximity, ABS_DISTANCE,
@@ -1022,6 +1022,10 @@ static int ltr557_enable_ps(struct ltr557_data *ltr, int enable)
 		/* clear last ps value */
 		ltr->last_ps = -1;
 
+		input_report_abs(ltr->input_proximity, ABS_DISTANCE,
+			ltr->last_ps);
+		input_sync(ltr->input_proximity);
+
 		rc = ltr557_process_data(ltr, 0, 1);
 		if (rc) {
 			dev_err(&ltr->i2c->dev, "process ps data failed\n");
@@ -1102,6 +1106,9 @@ static int ltr557_enable_als(struct ltr557_data *ltr, int enable)
 
 		/* Clear last value and report even not change. */
 		ltr->last_als = -1;
+
+		input_report_abs(ltr->input_light, ABS_MISC, ltr->last_als);
+		input_sync(ltr->input_light);
 
 		rc = ltr557_process_data(ltr, 1, 0);
 		if (rc) {
@@ -1969,6 +1976,10 @@ static int ltr557_probe(struct i2c_client *client,
 		printk("sensors class register failed.\n");
 		goto err_register_ps_cdev;
 	}
+
+	ltr->ps_cal = 0;
+	ltr->als_delay = LTR557_ALS_REPEAT_RATE_DEFAULT;
+	ltr->ps_delay  = LTR557_PS_REPEAT_RATE_DEFAULT;
 
 	sensor_power_config(&client->dev, power_config,
 			ARRAY_SIZE(power_config), false);

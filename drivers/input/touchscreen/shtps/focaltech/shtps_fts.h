@@ -269,6 +269,10 @@ struct shtps_fts {
 		char					stflib_param_str[100];
 	#endif /* SHTPS_DEVELOP_MODE_ENABLE */
 
+	#if defined( SHTPS_BOOT_FWUPDATE_ENABLE )
+		int							boot_fw_update_checked;
+	#endif /* SHTPS_BOOT_FWUPDATE_ENABLE */
+
 	struct shtps_offset_info	offset;
 
 	#if defined( SHTPS_LOW_POWER_MODE_ENABLE )

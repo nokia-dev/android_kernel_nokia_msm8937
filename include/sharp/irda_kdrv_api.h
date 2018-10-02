@@ -221,6 +221,7 @@ inline static char *get_shirda_version(const char *ver_file)
 							irda_kdrv_capa_notify)
 #define	IRDA_DRV_IOCTL_GET_MEDIABUSY	_IOR(IRDA_DRV_IOCTL_MAGIC, 7, int)
 #define	IRDA_DRV_IOCTL_CLR_MEDIABUSY	_IO(IRDA_DRV_IOCTL_MAGIC,  8)
+#define	IRDA_DRV_IOCTL_FTM_RECEIVER	_IO(IRDA_DRV_IOCTL_MAGIC,  9)
 
 #define	IRDA_LDISC_NO_ERR		(1)
 #define	IRDA_LDISC_READ_CANCELED	(2)

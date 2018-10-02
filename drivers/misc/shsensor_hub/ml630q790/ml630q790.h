@@ -46,10 +46,11 @@
 //#define SHUB_SW_GPIO_INT1           	/* SHMDS_HUB_0115_01 add */
 #define SHUB_SW_PICKUP_DETECT       	/* SHMDS_HUB_1701_10 add */
 #define SHUB_SW_PICKUP_ALGO_03      	/* SHMDS_HUB_1702_01 add */
-#define SHUB_SW_TWIST_DETECT        	/* SHMDS_HUB_2301_01 add */
+//#define SHUB_SW_TWIST_DETECT        	/* SHMDS_HUB_2301_01 add */
 //#define SHUB_SW_PWM_ENABLE          	/* SHMDS_HUB_3001_01 add  SHMDS_HUB_3001_03 del*/
 //#define SHUB_SW_MAG_INT             	/* SHMDS_HUB_0103_20 add */
 #define SHUB_SW_SHTERM              	/* SHMDS_HUB_3703_01 add */
+#define SHUB_SW_PROX_CHECKER			/* SHMDS_HUB_1701_17 add */
 
 #define CONFIG_HOSTIF_SPI
 //#define CONFIG_HOSTIF_I2C
@@ -73,8 +74,6 @@
 //#define CONFIG_BARO_SENSOR
 //#define CONFIG_PWM_LED
 //#define CONFIG_BKL_PWM_LED
-#define CONFIG_ANDROID_ENGINEERING
-#define SHUB_SW_FACTORY_MODE
 
 #define SENOSR_HUB_I2C_SLAVE_ADDRESS (0x2f)
 #define SENOSR_HUB_DRIVER_NAME    "sensorhub"

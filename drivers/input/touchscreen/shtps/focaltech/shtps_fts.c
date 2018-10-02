@@ -75,6 +75,8 @@ static DEFINE_MUTEX(shtps_loader_lock);
 extern int tp_probe_success;
 extern void fih_touch_tpfwver_read(char *);
 extern void fih_touch_vendor_read(char *);
+extern void touch_selftest(void);
+extern int selftest_result_read(void);
 extern struct fih_touch_cb touch_cb;
 /*********************for FTM************************************************************************/
 struct shtps_fts*	gShtps_fts = NULL;
@@ -550,6 +552,13 @@ static void shtps_setsleep_proc(struct shtps_fts *ts, u8 sleep)
 		shtps_func_request_sync(ts, SHTPS_FUNC_REQ_EVEMT_LCD_OFF);
 	}else{
 		shtps_func_request_async(ts, SHTPS_FUNC_REQ_EVEMT_LCD_ON);
+
+		#if defined( SHTPS_BOOT_FWUPDATE_ENABLE )
+			if(ts->boot_fw_update_checked == 0){
+				ts->boot_fw_update_checked = 1;
+				shtps_func_request_async(ts, SHTPS_FUNC_REQ_BOOT_FW_UPDATE);
+			}
+		#endif /* SHTPS_BOOT_FWUPDATE_ENABLE */
 	}
 }
 
@@ -4444,6 +4453,8 @@ int shtps_fts_core_probe(
 	tp_probe_success = 1;
 	touch_cb.touch_tpfwver_read = fih_touch_tpfwver_read;
 	touch_cb.touch_vendor_read = fih_touch_vendor_read;
+	touch_cb.touch_selftest = touch_selftest;
+	touch_cb.touch_selftest_result = selftest_result_read;
 	//for FTM end
 	SHTPS_LOG_DBG_PRINT("shtps_fts_probe() done\n");
 	return 0;

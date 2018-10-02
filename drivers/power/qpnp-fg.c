@@ -3063,7 +3063,7 @@ int fih_dump_info(struct fg_chip *chip)
 	int b_status, cg_enabled, bcg_enabled;
 	int fg_capa, fg_c_now, fg_v_now, fg_temp, fg_id_ohm;
 
-	u8 reg100c, reg100d, reg100e, reg1010, reg10f2, reg10f3, reg10f5, reg10fa, reg10fd;
+	u8 reg100c, reg100d, reg100e, reg1010, reg10f2, reg10f3, reg10f4, reg10f5, reg10fa, reg10fd;
 	u8 reg1210, reg1242;
 	u8 reg1307, reg1308, reg1309, reg130a, reg130b, reg130c, reg130d, reg1340, reg13f2, reg13f3, reg13f4, reg13f5;
 	u8 reg1608, reg1610;
@@ -3145,6 +3145,7 @@ int fih_dump_info(struct fg_chip *chip)
 	rc = fg_read(chip, &reg1010, 0x1010, 1);
 	rc = fg_read(chip, &reg10f2, 0x10f2, 1);
 	rc = fg_read(chip, &reg10f3, 0x10f3, 1);
+	rc = fg_read(chip, &reg10f4, 0x10f4, 1);
 	rc = fg_read(chip, &reg10f5, 0x10f5, 1);
 	rc = fg_read(chip, &reg10fa, 0x10fa, 1);
 	rc = fg_read(chip, &reg10fd, 0x10fd, 1);
@@ -3180,8 +3181,8 @@ int fih_dump_info(struct fg_chip *chip)
 		pr_err("UTP:%d,BEN:%d,CEN:%d,STS:%d,TMP:%d,VBAT:%d,IBAT:%d,CAP:%d,UVL:%d,ICN:%d,ID:%d,CT:%ld,PMIC:%ld,PA0:%ld\n",
 		u_type, bcg_enabled, cg_enabled, b_status, fg_temp, fg_v_now, fg_c_now, fg_capa, u_v_now, cg_cur, fg_id_ohm, case_therm, pmic, pa0);
 
-		pr_err("C:S%xS%xS%xS%xF%xF%xF%xS%x, BI:S%xC%x, U:S%xS%xS%xS%xS%xS%xS%xC%xC%xC%xC%xC%x, M:S%xS%x\n",
-		reg100c, reg100d, reg100e, reg1010, reg10f2, reg10f3, reg10fa, reg10fd,
+		pr_err("C:S%xS%xS%xS%xF%xF%xF%xS%xS%xS%x, BI:S%xC%x, U:S%xS%xS%xS%xS%xS%xS%xC%xC%xC%xC%xC%x, M:S%xS%x\n",
+		reg100c, reg100d, reg100e, reg1010, reg10f2, reg10f3, reg10f4, reg10f5, reg10fa, reg10fd,
 		reg1210, reg1242,
 		reg1307, reg1308, reg1309, reg130a, reg130b, reg130c, reg130d, reg1340, reg13f2, reg13f3, reg13f4, reg13f5,
 		reg1608, reg1610);

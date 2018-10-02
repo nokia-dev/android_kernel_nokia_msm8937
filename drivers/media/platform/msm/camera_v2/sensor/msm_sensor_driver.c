@@ -18,6 +18,13 @@
 #include "msm_cci.h"
 #include "msm_camera_dt_util.h"
 #include "fih_read_sensor_id.h"
+#define FTM
+#ifdef FTM
+#define CAMERA_MASK_S5K3L8 0X01
+#define CAMERA_MASK_S5K5E8 0X02
+
+static int32_t g_camera_ping = 0;
+#endif
 
 /* Logging macro */
 #undef CDBG
@@ -689,6 +696,18 @@ static void msm_sensor_fill_sensor_info(struct msm_sensor_ctrl_t *s_ctrl,
 	strlcpy(entity_name, s_ctrl->msm_sd.sd.entity.name, MAX_SENSOR_NAME);
 }
 
+#ifdef FTM
+static ssize_t show_camera_ping(struct device *dev,
+					struct device_attribute *attr, char *buf)
+{
+	pr_err("%s=%d", __func__, g_camera_ping);
+	return scnprintf(buf, PAGE_SIZE, "%d\n", g_camera_ping);
+}
+
+static DEVICE_ATTR(cam_ping, S_IWUSR | S_IRUGO, show_camera_ping, NULL);
+static const struct attribute *cam_ping_attrib = &dev_attr_cam_ping.attr;
+#endif
+
 /* static function definition */
 static int32_t msm_sensor_driver_is_special_support(
 	struct msm_sensor_ctrl_t *s_ctrl,
@@ -1164,6 +1183,17 @@ CSID_TG:
 			subdev_id[SUB_MODULE_LED_FLASH] = -1;
 	}
 
+#ifdef FTM
+	/* Add for FIH test */
+	if(!strcmp(slave_info->sensor_name, "s5k3l8_oc6"))
+		g_camera_ping |= CAMERA_MASK_S5K3L8;
+	else if(!strcmp(slave_info->sensor_name, "s5k5e8_oc6"))
+		g_camera_ping |= CAMERA_MASK_S5K5E8;
+
+	pr_err("%s wbl E slave_info->sensor_name = %s \n", __func__, slave_info->sensor_name);
+	pr_err("%s wbl E g_camera_ping = 0x%x \n", __func__, g_camera_ping);
+#endif
+
 	/*
 	 * Create /dev/videoX node, comment for now until dummy /dev/videoX
 	 * node is created and used by HAL
@@ -1560,6 +1590,13 @@ static int32_t msm_sensor_driver_platform_probe(struct platform_device *pdev)
 
 	/* Fill device in power info */
 	s_ctrl->sensordata->power_info.dev = &pdev->dev;
+#ifdef FTM
+	pr_err("platform : Register sysfs, cam_ping_attrib\n");
+	rc = sysfs_create_file(&pdev->dev.kobj, cam_ping_attrib);
+	if(rc) {
+		pr_err("Cannot register sysfs, cam_ping_attrib\n");
+	}
+#endif
 	return rc;
 FREE_S_CTRL:
 	kfree(s_ctrl);

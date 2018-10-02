@@ -19,7 +19,7 @@
 * 1.Included header files
 *******************************************************************************/
 #include "shtps_fts.h"
-
+#include "fwctl/shtps_fwctl_focaltech.h"
 /*******************************************************************************
 * Private constant and macro definitions using #define
 *******************************************************************************/
@@ -39,7 +39,7 @@
 
 
 #define FTS_DRIVER_INFO  "Qualcomm_Ver 1.1 2015-04-30"
-#define FTS_REG_FW_VER		0xA6
+//#define FTS_REG_FW_VER		0xA6
 
 #define GTP_ESD_PROTECT 0
 
@@ -517,6 +517,7 @@ static ssize_t shtps_fts_tpfwver_show(struct device *dev, struct device_attribut
 }
 void fih_touch_tpfwver_read(char *fw_ver)
 {
+    #if 0
     ssize_t num_read_chars = 0;
     u8 fwver = 0;
 
@@ -534,6 +535,21 @@ void fih_touch_tpfwver_read(char *fw_ver)
         num_read_chars = snprintf(fw_ver, PAGE_SIZE, "%02X\n", fwver);
     }
     shtps_mutex_unlock_ctrl();
+#endif
+	int rc=0;
+	u8 buf[2] = { 0x00, 0x00 };
+
+	rc = M_READ_FUNC(gShtps_fts->fwctl_p, FTS_REG_FW_VER, &buf[0], 1);
+	if(rc == 0){
+		rc = M_READ_FUNC(gShtps_fts->fwctl_p, FTS_REG_MODEL_VER, &buf[1], 1);
+		if(rc == 0){
+            snprintf(fw_ver, 128, "%02X%02X\n", buf[1], buf[0]);
+		}
+		else if(rc < 0)
+		    pr_err("I2c transfer error! \n");
+	}
+	else if(rc < 0)
+		    pr_err("I2c transfer error2! \n");
 
 }
 void fih_touch_vendor_read(char *buf)

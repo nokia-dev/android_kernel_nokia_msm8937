@@ -99,9 +99,9 @@
 //#define SHUB_GPIO_RST     qpnp_pin_map("pm8941-gpio", 9) /* SHMDS_HUB_0104_03 mod */
 //#define SHUB_GPIO_REMP    (80)                           /* SHMDS_HUB_0104_04 mod */
 //#define SHUB_GPIO_INT0    (66)                           /* SHMDS_HUB_0104_02 mod */
-#define SHUB_GPIO_RST     (73)  /* SHMDS_HUB_0121_01 SHMDS_HUB_0133_02 mod (93->39->73) */
-#define SHUB_GPIO_REMP    (44)  /* SHMDS_HUB_0121_01 SHMDS_HUB_0127_01 SHMDS_HUB_0133_02 mod (94->86->96->44) */
-#define SHUB_GPIO_INT0    (69)  /* SHMDS_HUB_0121_01 SHMDS_HUB_0133_02 mod (75->44->69) */
+#define SHUB_GPIO_RST     (39)  /* SHMDS_HUB_0121_01 SHMDS_HUB_0133_02 mod (93->39->73) */
+#define SHUB_GPIO_REMP    (96)  /* SHMDS_HUB_0121_01 SHMDS_HUB_0127_01 SHMDS_HUB_0133_02 mod (94->86->96->44) */
+#define SHUB_GPIO_INT0    (44)  /* SHMDS_HUB_0121_01 SHMDS_HUB_0133_02 mod (75->44->69) */
 /* SHMDS_HUB_0115_01 mod S */
 #ifdef SHUB_SW_GPIO_INT1
 #define SHUB_GPIO_INT1    (42)  /* SHMDS_HUB_0121_01 (76->42) */

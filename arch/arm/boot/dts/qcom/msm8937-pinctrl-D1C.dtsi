@@ -151,7 +151,7 @@
 				config {
 					pins = "gpio22", "gpio23";
 					drive-strength = <2>;
-					bias-disable;
+					output-high;
 				};
 			};
 
@@ -165,7 +165,7 @@
 				config {
 					pins = "gpio22", "gpio23";
 					drive-strength = <2>;
-					bias-pull-down;
+					output-high;
 				};
 			};
 		};

@@ -187,7 +187,7 @@ static long shub_ioctl(struct file *filp, unsigned int cmd, unsigned long arg, i
                 uint8_t *fw_data_page1 = NULL;
                 uint8_t *fw_data_page2 = NULL;
                 uint32_t allocate_size;
-                uint8_t *data_addr;             // SHMDS_HUB_0305_01 add
+                uint8_t *data_addr = NULL;             // SHMDS_HUB_0305_01 add
                 ret = copy_from_user(&ioc,argp,sizeof(ioc));
                 if (ret) {
                     printk( "error(copy_from_user) : shub_ioctl(cmd = SHUBIO_MCU_FW_UPDATE)\n" );

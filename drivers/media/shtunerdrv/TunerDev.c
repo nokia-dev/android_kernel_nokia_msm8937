@@ -278,7 +278,7 @@ static int __init tuner_init(void)
 	int ret, i ;
 	int loop = sizeof(use_gpiono)/sizeof(stGPIO_DEF);
 #ifdef DTV_DRV_PINCTRL
-//	int portno;
+	int portno;
 #else
 	unsigned int gpio_no;
 #endif
@@ -290,25 +290,24 @@ static int __init tuner_init(void)
 	}
 
 #ifdef DTV_DRV_PINCTRL
-//	np = of_find_node_by_name( NULL, "tunctrl" );
-//	if ( np ) {
+	np = of_find_node_by_name( NULL, "sharp,tunctrl" );
+	if ( np ) {
 		for ( i=0; i<loop; i++ ) {
-//			portno = of_get_named_gpio( np, use_gpiono[i].label ,0 );
-//			ret = gpio_request( portno, NULL );
-			ret = gpio_request( use_gpiono[i].no, NULL );
+			portno = of_get_named_gpio( np, use_gpiono[i].label ,0 );
+			ret = gpio_request( portno, NULL );
 
 			if ( ret < 0 ) {
 				printk(KERN_DEBUG "%s gpio_request() error : %d\n", use_gpiono[i].label, ret);
 			}
 		}
-//	}
-//	else {
-//		printk(KERN_DEBUG "of_find_node_by_name() error \n");
-//#if 1
-//		misc_deregister(&tuner_dev);
-//#endif
-//		return -1;
-//	}
+	}
+	else {
+		printk(KERN_DEBUG "of_find_node_by_name() error \n");
+#if 1
+		misc_deregister(&tuner_dev);
+#endif
+		return -1;
+	}
 #else
 	for(i=0; i<loop; i++){
 		/* PM8952_GPIO */
@@ -358,7 +357,7 @@ static void __exit tuner_cleanup(void)
 	int i ;
 	int loop = sizeof(use_gpiono)/sizeof(stGPIO_DEF);
 #ifdef DTV_DRV_PINCTRL
-//	int portno;
+	int portno;
 #else
 	unsigned int gpio_no;
 #endif
@@ -368,16 +367,16 @@ static void __exit tuner_cleanup(void)
 #endif
 
 #ifdef DTV_DRV_PINCTRL
-//	np = of_find_node_by_name( NULL, "tunctrl" );
-//	if ( np ) {
+	np = of_find_node_by_name( NULL, "sharp,tunctrl" );
+	if ( np ) {
 		for ( i=0; i<loop; i++ ) {
-//			portno = of_get_named_gpio( np, use_gpiono[i].label ,0 );
-			gpio_free( use_gpiono[i].no );
+			portno = of_get_named_gpio( np, use_gpiono[i].label ,0 );
+			gpio_free( portno );
 		}
-//	}
-//	else {
-//		printk(KERN_DEBUG "of_find_node_by_name() error \n");
-//	}
+	}
+	else {
+		printk(KERN_DEBUG "of_find_node_by_name() error \n");
+	}
 #else
 	for(i=0; i<loop; i++){
 		/* PM8952_GPIO */
@@ -410,7 +409,7 @@ static int gpio_init(void)
 	stGPIO_DEF *p = &use_gpiono[0];
 	int i;
 #ifdef DTV_DRV_PINCTRL
-//	int portno;
+	int portno;
 #else
 	unsigned int gpio_no;
 #endif
@@ -419,10 +418,9 @@ static int gpio_init(void)
 		if (p->direction == DirctionIn) {
 			/* GPIO Input */
 #ifdef DTV_DRV_PINCTRL
-//			portno = of_get_named_gpio( np, use_gpiono[i].label ,0 );
+			portno = of_get_named_gpio( np, use_gpiono[i].label ,0 );
 		//	printk(KERN_DEBUG "of_get_named_gpio() -- gpio_direction_input [%d][%s] \n", portno, use_gpiono[i].label);
-//			if ( gpio_direction_input( portno ) < 0 ) {
-			if ( gpio_direction_input( use_gpiono[i].no ) < 0 ) {
+			if ( gpio_direction_input( portno ) < 0 ) {
 				errcnt ++;
 				printk( "%s:%d gpio_direction_input error %s \n", __FILE__,__LINE__, use_gpiono[i].label );
 				continue;
@@ -454,10 +452,9 @@ static int gpio_init(void)
 		if (p->direction == DirctionOut) {
 			/* GPIO Output */
 #ifdef DTV_DRV_PINCTRL
-//			portno = of_get_named_gpio( np, use_gpiono[i].label ,0 );
+			portno = of_get_named_gpio( np, use_gpiono[i].label ,0 );
 		//	printk(KERN_DEBUG "of_get_named_gpio() -- direction_output [%d][%s] \n", portno, use_gpiono[i].label);
-//			if ( gpio_direction_output( portno, use_gpiono[i].out_val ) < 0 ) {
-			if ( gpio_direction_output( use_gpiono[i].no, use_gpiono[i].out_val ) < 0 ) {
+			if ( gpio_direction_output( portno, use_gpiono[i].out_val ) < 0 ) {
 				errcnt ++;
 				printk( "%s:%d gpio_direction_output error %s \n", __FILE__,__LINE__, use_gpiono[i].label );
 				continue;
@@ -560,8 +557,7 @@ static int gpio_set(unsigned int id, int value)
 			flag = 1;
 
 #ifdef DTV_DRV_PINCTRL
-//			portno = of_get_named_gpio( np, use_gpiono[i].label ,0 );
-			portno =  use_gpiono[i].no;
+			portno = of_get_named_gpio( np, use_gpiono[i].label ,0 );
 #else
 			if ( p->no > PM8952_GPIO_BASE ) {
 				/* PM8952_GPIO */
@@ -610,8 +606,7 @@ static int gpio_get(unsigned int id, int *val)
 			flag = 1;
 
 #ifdef DTV_DRV_PINCTRL
-//			portno = of_get_named_gpio( np, use_gpiono[i].label ,0 );
-			portno = use_gpiono[i].no;
+			portno = of_get_named_gpio( np, use_gpiono[i].label ,0 );
 			printk(KERN_DEBUG "of_get_named_gpio() [%d][%s] \n", portno, use_gpiono[i].label);
 #else
 			if ( p->no > PM8952_GPIO_BASE ) {
@@ -874,28 +869,27 @@ static int tuner_init_spi(void)
 	int ret, i ;
 	int loop = sizeof(use_gpiono_spi)/sizeof(stGPIO_DEF_spi);
 #ifdef DTV_DRV_PINCTRL
-//	int portno;
+	int portno;
 #else
 	unsigned int gpio_no;
 #endif
 
 #ifdef DTV_DRV_PINCTRL
-//	np = of_find_node_by_name( NULL, "tunctrl" );
-//	if ( np ) {
+	np = of_find_node_by_name( NULL, "sharp,tunctrl" );
+	if ( np ) {
 		for ( i=0; i<loop; i++ ) {
-//			portno = of_get_named_gpio( np, use_gpiono_spi[i].label ,0 );
-//			ret = gpio_request( portno, NULL );
-			ret = gpio_request( use_gpiono_spi[i].no, NULL );
+			portno = of_get_named_gpio( np, use_gpiono_spi[i].label ,0 );
+			ret = gpio_request( portno, NULL );
 
 			if ( ret < 0 ) {
 				printk(KERN_DEBUG "%s gpio_request() error : %d\n", use_gpiono_spi[i].label, ret);
 			}
 		}
-//	}
-//	else {
-//		printk(KERN_DEBUG "of_find_node_by_name() error \n");
-//		return -1;
-//	}
+	}
+	else {
+		printk(KERN_DEBUG "of_find_node_by_name() error \n");
+		return -1;
+	}
 #else
 	for(i=0; i<loop; i++){
 		/* PM8952_GPIO */
@@ -928,22 +922,22 @@ static void tuner_cleanup_spi(void)
 	int i ;
 	int loop = sizeof(use_gpiono_spi)/sizeof(stGPIO_DEF_spi);
 #ifdef DTV_DRV_PINCTRL
-//	int portno;
+	int portno;
 #else
 	unsigned int gpio_no;
 #endif
 
 #ifdef DTV_DRV_PINCTRL
-//	np = of_find_node_by_name( NULL, "tunctrl" );
-//	if ( np ) {
+	np = of_find_node_by_name( NULL, "sharp,tunctrl" );
+	if ( np ) {
 		for ( i=0; i<loop; i++ ) {
-//			portno = of_get_named_gpio( np, use_gpiono_spi[i].label ,0 );
-			gpio_free( use_gpiono_spi[i].no );
+			portno = of_get_named_gpio( np, use_gpiono_spi[i].label ,0 );
+			gpio_free( portno );
 		}
-//	}
-//	else {
-//		printk(KERN_DEBUG "of_find_node_by_name() error \n");
-//	}
+	}
+	else {
+		printk(KERN_DEBUG "of_find_node_by_name() error \n");
+	}
 #else
 	for(i=0; i<loop; i++){
 		/* PM8952_GPIO */
@@ -974,7 +968,7 @@ static int gpio_init_spi(void)
 	stGPIO_DEF_spi *p = &use_gpiono_spi[0];
 	int i;
 #ifdef DTV_DRV_PINCTRL
-//	int portno;
+	int portno;
 #else
 	unsigned int gpio_no;
 #endif
@@ -983,10 +977,9 @@ static int gpio_init_spi(void)
 		if (p->direction == DirctionIn) {
 			/* GPIO Input */
 #ifdef DTV_DRV_PINCTRL
-//			portno = of_get_named_gpio( np, use_gpiono_spi[i].label ,0 );
+			portno = of_get_named_gpio( np, use_gpiono_spi[i].label ,0 );
 		//	printk(KERN_DEBUG "of_get_named_gpio() -- gpio_direction_input [%d][%s] \n", portno, use_gpiono_spi[i].label);
-//			if ( gpio_direction_input( portno ) < 0 ) {
-			if ( gpio_direction_input( use_gpiono_spi[i].no ) < 0 ) {
+			if ( gpio_direction_input( portno ) < 0 ) {
 				errcnt ++;
 				printk( "%s:%d gpio_direction_input error %s \n", __FILE__,__LINE__, use_gpiono_spi[i].label );
 				continue;
@@ -1018,10 +1011,9 @@ static int gpio_init_spi(void)
 		if (p->direction == DirctionOut) {
 			/* GPIO Output */
 #ifdef DTV_DRV_PINCTRL
-//			portno = of_get_named_gpio( np, use_gpiono_spi[i].label ,0 );
+			portno = of_get_named_gpio( np, use_gpiono_spi[i].label ,0 );
 		//	printk(KERN_DEBUG "of_get_named_gpio() -- direction_output [%d][%s] \n", portno, use_gpiono_spi[i].label);
-//			if ( gpio_direction_output( portno, use_gpiono_spi[i].out_val ) < 0 ) {
-			if ( gpio_direction_output( use_gpiono_spi[i].no, use_gpiono_spi[i].out_val ) < 0 ) {
+			if ( gpio_direction_output( portno, use_gpiono_spi[i].out_val ) < 0 ) {
 				errcnt ++;
 				printk( "%s:%d gpio_direction_output error %s \n", __FILE__,__LINE__, use_gpiono_spi[i].label );
 				continue;
