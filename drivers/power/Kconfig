@@ -627,6 +627,12 @@ config MSM_BCL_CTL
 	  basic functionalities. This framework abstracts the underlying
 	  hardware for the top level modules.
 
+config FIH_MT_SLEEP
+	bool "MT sleep current test feature"
+	default n
+	help
+		Say Y here to enable support the MT sleep current test
+
 config MSM_BCL_PERIPHERAL_CTL
 	bool "BCL driver to control the PMIC BCL peripheral"
 	depends on SPMI || MSM_SPMI

@@ -30,6 +30,8 @@
 #include "mdss_smmu.h"
 #include "mdss_dsi_phy.h"
 
+#include "../../../fih/fih_lcm.h"	//Display-AckErrCountAndStatus-00+_20161014
+
 #define VSYNC_PERIOD 17
 #define DMA_TX_TIMEOUT 200
 #define DMA_TPG_FIFO_LEN 64
@@ -40,6 +42,13 @@
 #define MDSS_DSI_INT_CTRL	0x0110
 
 #define CEIL(x, y)		(((x) + ((y) - 1)) / (y))
+
+//Display-BBox-01*{_20160804
+//Display-BBox-00+{_20150610
+/* Black Box */
+#define BBOX_LCM_MIPI_FAIL do {printk("BBox;%s: LCM MIPI fail\n", __func__); printk("BBox::UEC;0::0\n");} while (0);
+//Display-BBox-00+}_20150610
+//Display-BBox-01*}_20160804
 
 struct mdss_dsi_ctrl_pdata *ctrl_list[DSI_CTRL_MAX];
 
@@ -1599,7 +1608,14 @@ static int mdss_dsi_cmd_dma_tpg_tx(struct mdss_dsi_ctrl_pdata *ctrl,
 	ret = wait_for_completion_timeout(&ctrl->dma_comp,
 				msecs_to_jiffies(DMA_TX_TIMEOUT));
 	if (ret == 0)
+	//Display-BBox-01*{_20160804
+	//Display-BBox-00*{_20150610
+	{
+		BBOX_LCM_MIPI_FAIL
 		ret = -ETIMEDOUT;
+	}
+	//Display-BBox-00*}_20150610
+	//Display-BBox-01*}_20160804
 	else
 		ret = tp->len;
 
@@ -1656,6 +1672,9 @@ static int mdss_dsi_cmds2buf_tx(struct mdss_dsi_ctrl_pdata *ctrl,
 				len = mdss_dsi_cmd_dma_tpg_tx(ctrl, tp);
 			else
 				len = mdss_dsi_cmd_dma_tx(ctrl, tp);
+
+			pr_debug("\n\n******************** [HL] %s, dchdr->wait = 0x%x, cm->payload[0] = 0x%x, cm->payload[1] = 0x%x, cm->payload[2] = 0x%x  **********************\n\n", __func__, dchdr->wait, cm->payload[0], cm->payload[1], cm->payload[2]);
+
 			if (IS_ERR_VALUE(len)) {
 				mdss_dsi_disable_irq(ctrl, DSI_CMD_TERM);
 				pr_err("%s: failed to call cmd_dma_tx for cmd = 0x%x\n",
@@ -2934,6 +2953,9 @@ bool mdss_dsi_ack_err_status(struct mdss_dsi_ctrl_pdata *ctrl)
 	u32 status;
 	unsigned char *base;
 	bool ret = false;
+	static char page_cnt[32] = {0};
+	static char page_status[32] ={0};	//Display-AckErrCountAndStatus-00+_20161014
+
 
 	base = ctrl->ctrl_base;
 
@@ -2954,6 +2976,18 @@ bool mdss_dsi_ack_err_status(struct mdss_dsi_ctrl_pdata *ctrl)
 			return false;
 
 		pr_err("%s: status=%x\n", __func__, status);
+
+		//Display-AckErrCountAndStatus-00+{_20161014
+		/*<<EricHsieh, AwER*/
+		ctrl->err_cont.dsi_ack_err_cnt++;
+		ctrl->err_cont.dsi_ack_err_status = status;
+		sprintf(page_cnt, "0x%x\n",ctrl->err_cont.dsi_ack_err_cnt);
+		sprintf(page_status, "0x%x\n",ctrl->err_cont.dsi_ack_err_status);
+		fih_awer_cnt_set(page_cnt);
+		fih_awer_status_set(page_status);
+		/*>>EricHsieh, AwER*/
+		//Display-AckErrCountAndStatus-00+}_20161014
+
 		ret = true;
 	}
 
@@ -3016,7 +3050,10 @@ static bool mdss_dsi_fifo_status(struct mdss_dsi_ctrl_pdata *ctrl)
 	if (status & 0xcccc4409) {
 		MIPI_OUTP(base + 0x000c, status);
 
-		pr_err("%s: status=%x\n", __func__, status);
+		//Display-AvoidConsoleCrashBecauseOfPrntingTooManyErrorMsgs-00*{_20150427
+		if (printk_ratelimit())
+			pr_err("%s: status=%x\n", __func__, status);
+		//Display-AvoidConsoleCrashBecauseOfPrntingTooManyErrorMsgs-00*}_20150427
 
 		/*
 		 * if DSI FIFO overflow is masked,
@@ -3053,7 +3090,10 @@ static bool mdss_dsi_status(struct mdss_dsi_ctrl_pdata *ctrl)
 
 	if (status & 0x80000000) { /* INTERLEAVE_OP_CONTENTION */
 		MIPI_OUTP(base + 0x0008, status);
-		pr_err("%s: status=%x\n", __func__, status);
+		//Display-AvoidConsoleCrashBecauseOfPrntingTooManyErrorMsgs-00*{_20150427
+		if (printk_ratelimit())
+			pr_err("%s: status=%x\n", __func__, status);
+		//Display-AvoidConsoleCrashBecauseOfPrntingTooManyErrorMsgs-00*}_20150427
 		ret = true;
 	}
 
@@ -3100,8 +3140,11 @@ static void __dsi_error_counter(struct dsi_err_container *err_container)
 
 	if (prev_time &&
 		((curr_time - prev_time) < err_container->err_time_delta)) {
-		pr_err("%s: panic in WQ as dsi error intrs within:%dms\n",
-				__func__, err_container->err_time_delta);
+		//Display-AvoidConsoleCrashBecauseOfPrntingTooManyErrorMsgs-00*}_20150427
+		if (printk_ratelimit())
+			pr_err("%s: panic in WQ as dsi error intrs within:%dms\n",
+					__func__, err_container->err_time_delta);
+		//Display-AvoidConsoleCrashBecauseOfPrntingTooManyErrorMsgs-00*}_20150427
 		MDSS_XLOG_TOUT_HANDLER_WQ("mdp", "dsi0_ctrl", "dsi0_phy",
 			"dsi1_ctrl", "dsi1_phy");
 	}

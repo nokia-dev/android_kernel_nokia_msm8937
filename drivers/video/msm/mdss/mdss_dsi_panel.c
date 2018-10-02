@@ -22,7 +22,7 @@
 #include <linux/qpnp/pwm.h>
 #include <linux/err.h>
 #include <linux/string.h>
-
+#include <linux/device.h>
 #include "mdss_dsi.h"
 #ifdef TARGET_HW_MDSS_HDMI
 #include "mdss_dba_utils.h"
@@ -34,6 +34,64 @@
 #define VSYNC_DELAY msecs_to_jiffies(17)
 
 DEFINE_LED_TRIGGER(bl_led_trigger);
+
+//Display-BBox-03*{_20161028
+//Display-BBox-02*{_20161021
+//Display-BBox-01*{_20160804
+//Display-BBox-00+{_20150610
+/* Black Box */
+#define BBOX_LCM_GPIO_FAIL 		do {printk("BBox;%s: LCM GPIO fail\n", __func__); printk("BBox::UEC;0::1\n");} while (0);
+#define BBOX_LCM_DISPLA_ON_FAIL	do {printk("BBox;%s: LCM Display on fail\n", __func__); printk("BBox::UEC;0::2\n");} while (0);
+#define BBOX_LCM_DISPLA_OFF_FAIL	do {printk("BBox;%s: LCM Display off fail\n", __func__); printk("BBox::UEC;0::3\n");} while (0);
+#define BBOX_LCM_DRIVER_IC_POWER_STATUS_NOT_08_FAIL	do {printk("BBox;%s: LCM driver ic power status is not 0x08\n", __func__); printk("BBox::UEC;0::5\n");} while (0);
+#define BBOX_LCM_DRIVER_IC_POWER_STATUS_NOT_0A_FAIL	do {printk("BBox;%s: LCM driver ic power status is not 0x0A\n", __func__); printk("BBox::UEC;0::6\n");} while (0);
+#define BBOX_LCM_OEM_FUNCTIONS_FAIL	do {printk("BBox;%s: LCM OEM functions (CE or CT or BLF or CABC) functions fail!\n", __func__); printk("BBox::UEC;0::8\n");} while (0);
+//Display-BBox-00+}_20150610
+//Display-BBox-01*}_20160804
+//Display-BBox-02*}_20161021
+//Display-BBox-03*}_20161028
+
+#define PANEL_REG_ADDR_LEN 8					//Display-ShowLCMAndBacklightStatus-00+_20160304
+
+//Display-ImplementCECTCABC-00+{_20160126
+static int ce_status = 0;
+static int ct_status = 0;
+static int cabc_status = 0;
+
+extern int SendCEOnlyAfterResume;
+extern unsigned long ce_en;
+extern int SendCTOnlyAfterResume;
+extern unsigned long ct_set;
+extern int SendCABCOnlyAfterResume;
+extern unsigned long cabc_set;
+//Display-ImplementCECTCABC-00+}_20160126
+
+//Display-FixCeCtNotWorkInAndroidO-FixedValueSinceNoUIForCeCtAlready-00+{_20171107
+//Set feault value for CE and CT because framework will not send default value in Android O
+static unsigned long default_ce = 1;
+static unsigned long default_ct = 6500;
+static int SetDefaultCeCtRightAfterBoot = 1;
+//Display-FixCeCtNotWorkInAndroidO-FixedValueSinceNoUIForCeCtAlready-00+}_20171107
+
+//Display-SendCECTCABCBeforeInit-00+{_20161213
+extern int SendCEBeforeInit;
+extern int SendCTBeforeInit;
+extern int SendCABCBeforeInit;
+//Display-SendCECTCABCBeforeInit-00+}_20161213
+
+//win add
+extern void fih_tp_lcm_resume(void);
+extern void fih_tp_lcm_suspend(void);
+//win add
+
+static int DispOff = 0;	//Display-NT35597-Fix_JGR-5432-AvoidCabcOffCmdIsSentDuring0x28And0x11Cmd-00+_20160601
+void fih_get_panel_status(struct mdss_dsi_ctrl_pdata *ctrl_pdata);//gatycclu - MA3-589 - Show Driver IC status
+
+//Display-SendCECTCABCBeforeInit-00+{_20161213
+static int mdss_dsi_panel_ce_onoff_BeforeInit(struct mdss_dsi_ctrl_pdata *ctrl_pdata, unsigned long enable);
+static int mdss_dsi_panel_ct_set_BeforeInit(struct mdss_dsi_ctrl_pdata *ctrl_pdata, unsigned long value);
+static int mdss_dsi_panel_cabc_set_BeforeInit(struct mdss_dsi_ctrl_pdata *ctrl_pdata, unsigned long value);
+//Display-SendCECTCABCBeforeInit-00+}_20161213
 
 void mdss_dsi_panel_pwm_cfg(struct mdss_dsi_ctrl_pdata *ctrl)
 {
@@ -180,16 +238,17 @@ static void mdss_dsi_panel_apply_settings(struct mdss_dsi_ctrl_pdata *ctrl,
 	mdss_dsi_cmdlist_put(ctrl, &cmdreq);
 }
 
-static void mdss_dsi_panel_cmds_send(struct mdss_dsi_ctrl_pdata *ctrl,
+int mdss_dsi_panel_cmds_send(struct mdss_dsi_ctrl_pdata *ctrl,	//Display-EnhanceErrorHandling-00*_20150320
 			struct dsi_panel_cmds *pcmds, u32 flags)
 {
 	struct dcs_cmd_req cmdreq;
 	struct mdss_panel_info *pinfo;
+	int len = 1;	//Display-EnhanceErrorHandling-00*_20150320
 
 	pinfo = &(ctrl->panel_data.panel_info);
 	if (pinfo->dcs_cmd_by_left) {
 		if (ctrl->ndx != DSI_CTRL_LEFT)
-			return;
+			return len;	//Display-EnhanceErrorHandling-00*_20150320
 	}
 
 	memset(&cmdreq, 0, sizeof(cmdreq));
@@ -206,7 +265,11 @@ static void mdss_dsi_panel_cmds_send(struct mdss_dsi_ctrl_pdata *ctrl,
 	cmdreq.rlen = 0;
 	cmdreq.cb = NULL;
 
-	mdss_dsi_cmdlist_put(ctrl, &cmdreq);
+	//Display-EnhanceErrorHandling-00*{_20150320
+	len = mdss_dsi_cmdlist_put(ctrl, &cmdreq);
+
+	return len;
+	//Display-EnhanceErrorHandling-00*}_20150320
 }
 
 static char led_pwm1[2] = {0x51, 0x0};	/* DTYPE_DCS_WRITE1 */
@@ -299,6 +362,7 @@ static int mdss_dsi_request_gpios(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 		if (rc) {
 			pr_err("request disp_en gpio failed, rc=%d\n",
 				       rc);
+			BBOX_LCM_GPIO_FAIL	//Display-BBox-00+_20150610	//Display-BBox-01*_20160804
 			goto disp_en_gpio_err;
 		}
 	}
@@ -306,6 +370,7 @@ static int mdss_dsi_request_gpios(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 	if (rc) {
 		pr_err("request reset gpio failed, rc=%d\n",
 			rc);
+		BBOX_LCM_GPIO_FAIL	//Display-BBox-00+_20150610	//Display-BBox-01*_20160804
 		goto rst_gpio_err;
 	}
 	if (gpio_is_valid(ctrl_pdata->bklt_en_gpio)) {
@@ -314,6 +379,7 @@ static int mdss_dsi_request_gpios(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 		if (rc) {
 			pr_err("request bklt gpio failed, rc=%d\n",
 				       rc);
+			BBOX_LCM_GPIO_FAIL	//Display-BBox-00+_20150610	//Display-BBox-01*_20160804
 			goto bklt_en_gpio_err;
 		}
 	}
@@ -322,6 +388,7 @@ static int mdss_dsi_request_gpios(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 		if (rc) {
 			pr_err("request panel mode gpio failed,rc=%d\n",
 								rc);
+			BBOX_LCM_GPIO_FAIL	//Display-BBox-00+_20150610	//Display-BBox-01*_20160804
 			goto mode_gpio_err;
 		}
 	}
@@ -339,11 +406,16 @@ disp_en_gpio_err:
 	return rc;
 }
 
+//Force lp11 before reset to match spec
+extern void mdss_dsi_force_lp11(struct mdss_dsi_ctrl_pdata *ctrl_pdata);
+
 int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 {
 	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
 	struct mdss_panel_info *pinfo = NULL;
 	int i, rc = 0;
+
+	pr_debug("\n\n******************** [HL] %s +++, enable = %d **********************\n\n", __func__, enable);
 
 	if (pdata == NULL) {
 		pr_err("%s: Invalid input data\n", __func__);
@@ -391,6 +463,7 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 			__func__, __LINE__);
 		return rc;
 	}
+	pr_debug("\n\n******************** [HL] %s, mdss_dsi_is_right_ctrl(ctrl_pdata) && mdss_dsi_is_hw_config_split(ctrl_pdata->shared_data)) || pinfo->is_dba_panel **********************\n\n", __func__);
 
 	if (!gpio_is_valid(ctrl_pdata->disp_en_gpio)) {
 		pr_debug("%s:%d, reset line not configured\n",
@@ -403,7 +476,10 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 		return rc;
 	}
 
+	pr_debug("\n\n******************** [HL] %s, !gpio_is_valid(ctrl_pdata->rst_gpio) **********************\n\n", __func__);
+
 	pr_debug("%s: enable = %d\n", __func__, enable);
+	pr_debug("\n\n******************** [HL] %s, enable = %d **********************\n\n", __func__, enable);
 
 	if (enable) {
 		rc = mdss_dsi_request_gpios(ctrl_pdata);
@@ -422,6 +498,13 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 				}
 			}
 
+			if(pdata->panel_info.pid == FIH_PJ050IA_NT35521S_720P_VIDEO_PANEL)
+			{
+				//Force lp11 before reset to match spec
+				mdss_dsi_force_lp11(ctrl_pdata);
+				msleep(5);
+			}
+
 			if (pdata->panel_info.rst_seq_len) {
 				rc = gpio_direction_output(ctrl_pdata->rst_gpio,
 					pdata->panel_info.rst_seq[0]);
@@ -435,9 +518,16 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 			for (i = 0; i < pdata->panel_info.rst_seq_len; ++i) {
 				gpio_set_value((ctrl_pdata->rst_gpio),
 					pdata->panel_info.rst_seq[i]);
+				if(pdata->panel_info.pid == FIH_SHARP_FT8607_720P_VIDEO_PANEL && i == (pdata->panel_info.rst_seq_len -1))
+				{
+					pr_debug("\n\n******************** [HL] %s, i = %d *****PULL HIGH tp reset***********\n\n", __func__, i);
+					gpio_set_value((ctrl_pdata->tp_reset_gpio), 1);
+				}
 				if (pdata->panel_info.rst_seq[++i])
 					usleep_range(pinfo->rst_seq[i] * 1000, pinfo->rst_seq[i] * 1000);
+				pr_debug("\n\n******************** [HL] %s, i = %d **********************\n\n", __func__, i);
 			}
+			pr_debug("\n\n******************** [HL] %s, for (i = 0; i < pdata->panel_info.rst_seq_len; ++i) **********************\n\n", __func__);
 
 			if (gpio_is_valid(ctrl_pdata->bklt_en_gpio)) {
 				rc = gpio_direction_output(
@@ -486,7 +576,12 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 			gpio_free(ctrl_pdata->mode_gpio);
 	}
 
+	pr_debug("\n\n******************** [HL] %s ---, OK, return 0 **********************\n\n", __func__);
+
+
 exit:
+	pr_debug("\n\n******************** [HL] %s ---, rc = %d **********************\n\n", __func__, rc);
+
 	return rc;
 }
 
@@ -707,7 +802,7 @@ static int mdss_dsi_panel_apply_display_setting(struct mdss_panel_data *pdata,
 				(lp_on_cmds->cmd_cnt))
 			mdss_dsi_panel_apply_settings(ctrl, lp_on_cmds);
 	else if ((mode == MDSS_PANEL_LOW_PERSIST_MODE_OFF) &&
-			(lp_off_cmds->cmd_cnt))
+			(lp_on_cmds->cmd_cnt))
 		mdss_dsi_panel_apply_settings(ctrl, lp_off_cmds);
 	else
 		return -EINVAL;
@@ -772,11 +867,28 @@ static void mdss_dsi_panel_switch_mode(struct mdss_panel_data *pdata,
 		mdss_dsi_panel_dsc_pps_send(ctrl_pdata, &pdata->panel_info);
 }
 
+static int old_bl_level = 0;	//Display-ShowLCMAndBacklightStatus-00+_20160304
 static void mdss_dsi_panel_bl_ctrl(struct mdss_panel_data *pdata,
 							u32 bl_level)
 {
 	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
 	struct mdss_dsi_ctrl_pdata *sctrl = NULL;
+	int res = 1;
+
+	pr_debug("[HL]%s: <-- start\n", __func__);
+	pr_debug("[HL]%s: bl_level = %d\n", __func__, bl_level);
+
+	//Display-NotEnableBlIfLcmNotExist-00+{_20160628
+	if(strstr(saved_command_line, " boot-lcm-not-exist")!=NULL)
+	{
+		pr_debug("%s: NO LCM PLUGGED, Not Allow To Enable BL!\n", __func__);
+		return;
+	}
+	else
+	{
+		pr_debug("%s: LCM PLUGGED, Allow To Enable BL!\n", __func__);
+	}
+	//Display-NotEnableBlIfLcmNotExist-00+}_20160628
 
 	if (pdata == NULL) {
 		pr_err("%s: Invalid input data\n", __func__);
@@ -785,6 +897,87 @@ static void mdss_dsi_panel_bl_ctrl(struct mdss_panel_data *pdata,
 
 	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
+
+	//Display-FixCeCtNotWorkInAndroidO-FixedValueSinceNoUIForCeCtAlready-00+{_20171107
+	if ((strstr(saved_command_line, "androidboot.device=D1C")!=NULL) || (strstr(saved_command_line, "androidboot.device=ND1")!=NULL))
+	{
+		if (strstr(saved_command_line, "androidboot.fihmode=0")!=NULL)	//Display-FixCABCCanNotWorkInAndroidO-00*_20171020
+		{
+			pr_debug("[HL]%s: SetDefaultCeCtRightAfterBoot = %d\n", __func__, SetDefaultCeCtRightAfterBoot);
+			if (SetDefaultCeCtRightAfterBoot)
+			{
+					res = mdss_dsi_panel_ce_onoff(ctrl_pdata, default_ce);
+					if (!res)	 //Display-EnhanceErrorHandling-00*_20150320
+					{
+						BBOX_LCM_OEM_FUNCTIONS_FAIL //Display-BBox-03+_20161028
+					}
+						
+					res = mdss_dsi_panel_ct_set(ctrl_pdata, default_ct);
+					if (!res)	 //Display-EnhanceErrorHandling-00*_20150320
+					{
+						BBOX_LCM_OEM_FUNCTIONS_FAIL //Display-BBox-03+_20161028
+					}				
+					
+					SetDefaultCeCtRightAfterBoot = 0;
+			}
+		}
+	}
+	//Display-FixCeCtNotWorkInAndroidO-FixedValueSinceNoUIForCeCtAlready-00+}_20171107
+	
+	//Display-ImplementCECTCABC-00+{_20160126	
+	if (SendCEOnlyAfterResume)
+	{
+		res = mdss_dsi_panel_ce_onoff(ctrl_pdata, ce_en);
+		if (!res)	 //Display-EnhanceErrorHandling-00*_20150320
+		{
+			BBOX_LCM_OEM_FUNCTIONS_FAIL //Display-BBox-03+_20161028
+		}
+		SendCEOnlyAfterResume = 0;
+		pr_debug("\n\n******************** [HL] %s: mdss_dsi_panel_ce_onoff(ctrl_pdata, ce_en)  **********************\n\n",__func__);
+	}
+
+#if 0
+	if (ctrl_pdata->display_on_cmds.cmd_cnt)
+	{
+		if (gDisplayOnEnable)
+		{
+			len = mdss_dsi_panel_cmds_send(ctrl_pdata, &ctrl_pdata->display_on_cmds);
+			if (!len)
+			{
+				pr_err("%s: cmds send fail\n", __func__);
+				return;
+			}
+
+			gDisplayOnEnable = 0;
+
+			//Display-FixLCMCanNotBringUpSinceAliveCheckMethodIsNotSetGoodEnough-00+_20151218
+			gDisplayOnCmdAlreadySent = 1;
+		}
+	}
+#endif
+
+	if (SendCTOnlyAfterResume)
+	{
+		res = mdss_dsi_panel_ct_set(ctrl_pdata, ct_set);
+		if (!res)	 //Display-EnhanceErrorHandling-00*_20150320
+		{
+			BBOX_LCM_OEM_FUNCTIONS_FAIL //Display-BBox-03+_20161028
+		}
+		SendCTOnlyAfterResume = 0;
+		pr_debug("\n\n******************** [HL] %s: mdss_dsi_panel_ct_set(ctrl_pdata, ct_set)	**********************\n\n",__func__);
+	}
+
+	if (SendCABCOnlyAfterResume)
+	{
+		res = mdss_dsi_panel_cabc_set(ctrl_pdata, cabc_set);
+		if (!res)	 //Display-EnhanceErrorHandling-00*_20150320
+		{
+			BBOX_LCM_OEM_FUNCTIONS_FAIL //Display-BBox-03+_20161028
+		}
+		SendCABCOnlyAfterResume = 0;
+		pr_debug("\n\n******************** [HL] %s: mdss_dsi_panel_cabc_set(ctrl_pdata, cabc_set)	**********************\n\n",__func__);
+	}
+	//Display-ImplementCECTCABC-00+}_20160126
 
 	/*
 	 * Some backlight controllers specify a minimum duty cycle
@@ -797,12 +990,15 @@ static void mdss_dsi_panel_bl_ctrl(struct mdss_panel_data *pdata,
 
 	switch (ctrl_pdata->bklt_ctrl) {
 	case BL_WLED:
+		pr_debug("\n\n******************** [HL] %s: BL_WLED	**********************\n\n",__func__);
 		led_trigger_event(bl_led_trigger, bl_level);
 		break;
 	case BL_PWM:
+		pr_debug("\n\n******************** [HL] %s: BL_PWM	**********************\n\n",__func__);
 		mdss_dsi_panel_bklt_pwm(ctrl_pdata, bl_level);
 		break;
 	case BL_DCS_CMD:
+		pr_debug("\n\n******************** [HL] %s: BL_DCS_CMD	**********************\n\n",__func__);
 		if (!mdss_dsi_sync_wait_enable(ctrl_pdata)) {
 			mdss_dsi_panel_bklt_dcs(ctrl_pdata, bl_level);
 			break;
@@ -831,6 +1027,21 @@ static void mdss_dsi_panel_bl_ctrl(struct mdss_panel_data *pdata,
 			__func__);
 		break;
 	}
+
+	//Display-ShowLCMAndBacklightStatus-00+{_20160304
+	if ((bl_level == 0) || ((old_bl_level == 0) && (bl_level != 0)))
+	{
+		pr_err("%s: level=%d\n", __func__, bl_level);
+		//gatycclu - MA3-589 - Show Driver IC status{
+		if ( bl_level !=0 )
+			fih_get_panel_status(ctrl_pdata);
+		//gatycclu - MA3-589 - Show Driver IC status}
+	}
+
+	old_bl_level = bl_level;
+	//Display-ShowLCMAndBacklightStatus-00+}_20160304
+
+	pr_debug("[HL]%s: <-- end\n", __func__);
 }
 
 #ifdef TARGET_HW_MDSS_HDMI
@@ -849,12 +1060,16 @@ static void mdss_dsi_panel_on_hdmi(struct mdss_dsi_ctrl_pdata *ctrl,
 }
 #endif
 
+static char power_status_reg[2] = {0x0A, 0x00};	//Display-ShowLCMAndBacklightStatus-00+_20160304
 static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 {
 	struct mdss_dsi_ctrl_pdata *ctrl = NULL;
 	struct mdss_panel_info *pinfo;
 	struct dsi_panel_cmds *on_cmds;
-	int ret = 0;
+	int len = 1;		//Display-EnhanceErrorHandling-00*_20150320
+	int res = -EPERM;	//Display-EnhanceErrorHandling-00*_20150320
+	char *rx_buf;		//Display-ShowLCMAndBacklightStatus-00+_20160304
+	int RetryReadPanelStatus = 0;	//Display-CutOffPowerIfDdicStatusIsnotCorrect-00+_20160912
 
 	if (pdata == NULL) {
 		pr_err("%s: Invalid input data\n", __func__);
@@ -882,7 +1097,229 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 				ctrl->ndx, on_cmds->cmd_cnt);
 
 	if (on_cmds->cmd_cnt)
-		mdss_dsi_panel_cmds_send(ctrl, on_cmds, CMD_REQ_COMMIT);
+	{
+		//Display-RotateImageOnlyForNB1Project+{_20160321
+		if(!(strnstr(saved_command_line, "androidboot.mode=2", strlen(saved_command_line))) && ((strstr(saved_command_line, "androidboot.device=D1C")!=NULL) || (strstr(saved_command_line, "androidboot.device=PLE")!=NULL)))
+		{
+			if (ctrl->switch_cmdpage_cmds.cmd_cnt)
+			{
+				len = mdss_dsi_panel_cmds_send(ctrl, &ctrl->switch_cmdpage_cmds, CMD_REQ_COMMIT);
+
+				rx_buf = kzalloc(PANEL_REG_ADDR_LEN, GFP_KERNEL);
+
+				//Display-CutOffPowerIfDdicStatusIsnotCorrect-00*{_20160912
+				do
+				{
+					mdss_dsi_panel_cmd_read(ctrl, power_status_reg[0], power_status_reg[1],
+									NULL, rx_buf, 1);
+					if (rx_buf[0] == 0x08)
+					{
+						pr_err("%s: LCM driver ic mipi interface is workable, status = 0x%x\n", __func__, rx_buf[0]);
+						break;
+					}
+					else
+					{
+						pr_err("%s: LCM driver ic mipi interface is not workable, status = 0x%x\n", __func__, rx_buf[0]);
+					}
+
+					mdelay(100);
+
+					pr_err("%s: LCM driver ic mipi interface is not workable, RetryReadPanelStatus = %d\n", __func__, RetryReadPanelStatus);
+
+					RetryReadPanelStatus++;
+				}
+				while (RetryReadPanelStatus < 3);
+
+				if (RetryReadPanelStatus >= 3)
+				{
+					pr_err("%s: RetryReadPanelStatus >= 3, LCM driver ic mipi interface is not workable\n", __func__);
+					kfree(rx_buf);
+					goto power_status_not_08_fail;
+				}
+				//Display-CutOffPowerIfDdicStatusIsnotCorrect-00*}_20160912
+
+				kfree(rx_buf);
+			}
+		}
+		//Display-RotateImageOnlyForNB1Project+}_20160321
+
+		//Display-FixCeCtNotWorkInAndroidO-FixedValueSinceNoUIForCeCtAlready-00*{_20171107
+		//Display-moveFeatureBeforeInitCommand start
+		if (strstr(saved_command_line, "androidboot.device=ND1")!=NULL)
+		{
+			if (strstr(saved_command_line, "androidboot.fihmode=0")!=NULL)	//Display-FixCABCCanNotWorkInAndroidO-00*_20171020
+			{
+				pr_debug("[HL]%s: default_ce = %ld\n", __func__, default_ce);
+				pr_debug("[HL]%s: default_ct = %ld\n", __func__, default_ct);
+				
+				if (SendCEBeforeInit)
+				{
+					res = mdss_dsi_panel_ce_onoff_BeforeInit(ctrl, default_ce);
+					if (!res)
+					{
+						BBOX_LCM_OEM_FUNCTIONS_FAIL
+					}
+					pr_debug("\n\n******************** [JSH] %s: mdss_dsi_panel_ce_onoff(ctrl_pdata, default_ce) **********************\n\n",__func__);
+				}
+
+				if (SendCTBeforeInit)
+				{
+					res = mdss_dsi_panel_ct_set_BeforeInit(ctrl, default_ct);
+					if (!res)
+					{
+						BBOX_LCM_OEM_FUNCTIONS_FAIL
+					}
+					pr_debug("\n\n******************** [JSH] %s: mdss_dsi_panel_ct_set(ctrl_pdata, default_ct) **********************\n\n",__func__);
+				}
+
+				if (SendCABCBeforeInit)
+				{
+					res = mdss_dsi_panel_cabc_set_BeforeInit(ctrl, cabc_set);
+					if (!res)
+					{
+						BBOX_LCM_OEM_FUNCTIONS_FAIL
+					}
+					pr_debug("\n\n******************** [JSH] %s: mdss_dsi_panel_cabc_set(ctrl_pdata, cabc_set) **********************\n\n",__func__);
+				}
+			}
+		}
+		//Display-moveFeatureBeforeInitCommand end
+		//Display-FixCeCtNotWorkInAndroidO-FixedValueSinceNoUIForCeCtAlready-00*}_20171107
+		
+		//Display-EnhanceErrorHandling-00*{_20150320
+		len = mdss_dsi_panel_cmds_send(ctrl, on_cmds, CMD_REQ_COMMIT);
+		if (!len)
+		{
+			goto cmds_fail;
+		}
+		//Display-EnhanceErrorHandling-00*}_20150320
+
+		DispOff = 0;	//Display-NT35597-Fix_JGR-5432-AvoidCabcOffCmdIsSentDuring0x28And0x11Cmd-00+_20160601
+
+		//Display-FixCeCtNotWorkInAndroidO-FixedValueSinceNoUIForCeCtAlready-00*{_20171107
+		if ((strstr(saved_command_line, "androidboot.device=D1C")!=NULL))
+		{
+			if (strstr(saved_command_line, "androidboot.fihmode=0")!=NULL)	//Display-FixCABCCanNotWorkInAndroidO-00*_20171020
+			{
+				pr_debug("[HL]%s: default_ce = %ld\n", __func__, default_ce);
+				pr_debug("[HL]%s: default_ct = %ld\n", __func__, default_ct);
+			
+				if (SendCEBeforeInit)
+				{
+					res = mdss_dsi_panel_ce_onoff_BeforeInit(ctrl, default_ce);
+					if (!res)
+					{
+						BBOX_LCM_OEM_FUNCTIONS_FAIL
+					}
+					pr_debug("\n\n******************** [HL] %s: AFTER 0x11 and 0x29, mdss_dsi_panel_ce_onoff(ctrl_pdata, default_ce) **********************\n\n",__func__);
+				}
+
+				if (SendCTBeforeInit)
+				{
+					res = mdss_dsi_panel_ct_set_BeforeInit(ctrl, default_ct);
+					if (!res)
+					{
+						BBOX_LCM_OEM_FUNCTIONS_FAIL
+					}
+					pr_debug("\n\n******************** [HL] %s: AFTER 0x11 and 0x29, mdss_dsi_panel_ct_set(ctrl_pdata, (ctrl, default_ct)) **********************\n\n",__func__);
+				}
+
+				if (SendCABCBeforeInit)
+				{
+					res = mdss_dsi_panel_cabc_set_BeforeInit(ctrl, cabc_set);
+					if (!res)
+					{
+						BBOX_LCM_OEM_FUNCTIONS_FAIL
+					}
+					pr_debug("\n\n******************** [HL] %s: AFTER 0x11 and 0x29, mdss_dsi_panel_cabc_set(ctrl_pdata, cabc_set) **********************\n\n",__func__);
+				}
+			}
+		}
+		else if (strstr(saved_command_line, "androidboot.device=PLE")!=NULL)
+		{
+			if (strstr(saved_command_line, "androidboot.fihmode=0")!=NULL)	//Display-FixCABCCanNotWorkInAndroidO-00*_20171020
+			{			
+				if (SendCEBeforeInit)
+				{
+					res = mdss_dsi_panel_ce_onoff_BeforeInit(ctrl, ce_en);
+					if (!res)
+					{
+						BBOX_LCM_OEM_FUNCTIONS_FAIL
+					}
+					pr_debug("\n\n******************** [HL] %s: AFTER 0x11 and 0x29, mdss_dsi_panel_ce_onoff(ctrl_pdata, ce_en) **********************\n\n",__func__);
+				}
+
+				if (SendCTBeforeInit)
+				{
+					res = mdss_dsi_panel_ct_set_BeforeInit(ctrl, ct_set);
+					if (!res)
+					{
+						BBOX_LCM_OEM_FUNCTIONS_FAIL
+					}
+					pr_debug("\n\n******************** [HL] %s: AFTER 0x11 and 0x29, mdss_dsi_panel_ct_set(ctrl_pdata, (ctrl, ct_set)) **********************\n\n",__func__);
+				}
+
+				if (SendCABCBeforeInit)
+				{
+					res = mdss_dsi_panel_cabc_set_BeforeInit(ctrl, cabc_set);
+					if (!res)
+					{
+						BBOX_LCM_OEM_FUNCTIONS_FAIL
+					}
+					pr_debug("\n\n******************** [HL] %s: AFTER 0x11 and 0x29, mdss_dsi_panel_cabc_set(ctrl_pdata, cabc_set) **********************\n\n",__func__);
+				}
+			}
+		}
+	//Display-FixCeCtNotWorkInAndroidO-FixedValueSinceNoUIForCeCtAlready-00*}_20171107
+	
+		//Display-RotateImageOnlyForNB1Project+{_20160321
+		if(!(strnstr(saved_command_line, "androidboot.mode=2", strlen(saved_command_line))) && ((strstr(saved_command_line, "androidboot.device=D1C")!=NULL) || (strstr(saved_command_line, "androidboot.device=PLE")!=NULL)))
+		{
+			if (ctrl->switch_cmdpage_cmds.cmd_cnt)
+			{
+				len = mdss_dsi_panel_cmds_send(ctrl, &ctrl->switch_cmdpage_cmds, CMD_REQ_COMMIT);
+
+				rx_buf = kzalloc(PANEL_REG_ADDR_LEN, GFP_KERNEL);
+
+				//Display-CutOffPowerIfDdicStatusIsnotCorrect-00*{_20160912
+				do
+				{
+					mdss_dsi_panel_cmd_read(ctrl, power_status_reg[0], power_status_reg[1],
+									NULL, rx_buf, 1);
+					if (rx_buf[0] == 0x9C)
+					{
+						pr_err("%s: LCM Driver IC is alive, status = 0x%x\n", __func__, rx_buf[0]);
+						break;
+					}
+					else
+					{
+						pr_err("%s: LCM Driver IC is not alive, status = 0x%x\n", __func__, rx_buf[0]);
+					}
+
+					mdelay(100);
+
+					pr_err("%s: LCM Driver IC is not alive, RetryReadPanelStatus = %d\n", __func__, RetryReadPanelStatus);
+
+					RetryReadPanelStatus++;
+				}
+				while (RetryReadPanelStatus < 3);
+
+				if (RetryReadPanelStatus >= 3)
+				{
+					pr_err("%s: RetryReadPanelStatus >= 3, LCM Driver IC is not alive\n", __func__);
+					kfree(rx_buf);
+					goto power_status_not_0a_fail;
+				}
+				//Display-CutOffPowerIfDdicStatusIsnotCorrect-00*}_20160912
+
+				kfree(rx_buf);
+			}
+		}
+		//Display-RotateImageOnlyForNB1Project+}_20160321
+	}
+
+	if(ctrl->panel_data.panel_info.pid == FIH_ILI7807E_1080P_VIDEO_PANEL)
+	  fih_tp_lcm_resume();
 
 	if (pinfo->compression_mode == COMPRESSION_DSC)
 		mdss_dsi_panel_dsc_pps_send(ctrl, pinfo);
@@ -894,7 +1331,18 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 
 end:
 	pr_debug("%s:-\n", __func__);
-	return ret;
+//Display-EnhanceErrorHandling-00*{_20150320
+	return 0;
+cmds_fail:
+	BBOX_LCM_DISPLA_ON_FAIL //Display-BBox-01+_20160804
+	return res;
+power_status_not_08_fail:
+	BBOX_LCM_DRIVER_IC_POWER_STATUS_NOT_08_FAIL //Display-BBox-02+_20161021
+	return res;
+power_status_not_0a_fail:
+	BBOX_LCM_DRIVER_IC_POWER_STATUS_NOT_0A_FAIL //Display-BBox-02+_20161021
+	return res;
+//Display-EnhanceErrorHandling-00*}_20150320
 }
 
 #ifdef TARGET_HW_MDSS_HDMI
@@ -971,6 +1419,8 @@ static int mdss_dsi_panel_off(struct mdss_panel_data *pdata)
 {
 	struct mdss_dsi_ctrl_pdata *ctrl = NULL;
 	struct mdss_panel_info *pinfo;
+	int len = 1;		//Display-EnhanceErrorHandling-00*_20150320
+	int res = -EPERM;	//Display-EnhanceErrorHandling-00*_20150320
 
 	if (pdata == NULL) {
 		pr_err("%s: Invalid input data\n", __func__);
@@ -988,8 +1438,26 @@ static int mdss_dsi_panel_off(struct mdss_panel_data *pdata)
 			goto end;
 	}
 
+	//win add
+	if(ctrl->panel_data.panel_info.pid == FIH_ILI7807E_1080P_VIDEO_PANEL)
+	  fih_tp_lcm_suspend();
+	//win add
+
 	if (ctrl->off_cmds.cmd_cnt)
-		mdss_dsi_panel_cmds_send(ctrl, &ctrl->off_cmds, CMD_REQ_COMMIT);
+	{
+		//Display-EnhanceErrorHandling-00*{_20150320
+		DispOff = 1;	//Display-NT35597-Fix_JGR-5432-AvoidCabcOffCmdIsSentDuring0x28And0x11Cmd-00+_20160601
+		len = mdss_dsi_panel_cmds_send(ctrl, &ctrl->off_cmds, CMD_REQ_COMMIT);
+		if (!len)
+		{
+			goto cmds_fail;
+		}
+		//Display-EnhanceErrorHandling-00*}_20150320
+	}
+
+	//gatycclu - MA3-589 - Show Driver IC status{
+	fih_get_panel_status(ctrl);
+	//gatycclu - MA3-589 - Show Driver IC status}
 
 	mdss_dsi_panel_off_hdmi(ctrl, pinfo);
 
@@ -998,7 +1466,659 @@ end:
 	ctrl->idle = false;
 	pr_debug("%s:-\n", __func__);
 	return 0;
+
+//Display-EnhanceErrorHandling-00+{_20150320
+cmds_fail:
+	BBOX_LCM_DISPLA_OFF_FAIL	//Display-BBox-01+_20160804
+	return res;
+//Display-EnhanceErrorHandling-00+}_20150320
 }
+
+//gatycclu - MA3-589 - Show Driver IC status{
+void fih_get_panel_status(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
+{
+	char *rx_buf;		//gatycclu - MA3-589 - Show Driver IC status
+
+	if( strstr(saved_command_line, "androidboot.device=MA3")!=NULL
+			 || strstr(saved_command_line, "androidboot.device=MS3")!=NULL
+			 || strstr(saved_command_line, "androidboot.device=MF3")!=NULL )
+	{
+		{
+			rx_buf = kzalloc(PANEL_REG_ADDR_LEN, GFP_KERNEL);
+			mdss_dsi_panel_cmd_read(ctrl_pdata, power_status_reg[0], power_status_reg[1],
+								NULL, rx_buf, 1);
+			pr_err("%s: LCM Driver status = 0x%x\n", __func__, rx_buf[0]);
+			kfree(rx_buf);
+		}
+	}
+}
+//gatycclu - MA3-589 - Show Driver IC status}
+
+//Display-SendCECTCABCBeforeInit-00+{_20161213
+static int mdss_dsi_panel_ce_onoff_BeforeInit(struct mdss_dsi_ctrl_pdata *ctrl_pdata, unsigned long enable)
+{
+	int len = 1;
+	int cabc_mode = 0;
+
+	pr_debug("\n\n*** [HL] %s, enable = %ld ***\n\n", __func__,enable);
+
+	switch (ctrl_pdata->panel_data.panel_info.pid)
+	{
+		case FIH_NT35521S_720P_VIDEO_PANEL:
+			switch (cabc_status)
+			{
+				case CABC_OFF:
+					cabc_mode = ctrl_pdata->cabc_off_cmds_beforeInit.cmds->payload[1];
+					break;
+				case CABC_UI:
+					cabc_mode = ctrl_pdata->cabc_ui_cmds_beforeInit.cmds->payload[1];
+					break;
+				case CABC_STILL:
+					cabc_mode = ctrl_pdata->cabc_still_cmds_beforeInit.cmds->payload[1];
+					break;
+				case CABC_MOVING:
+					cabc_mode = ctrl_pdata->cabc_moving_cmds_beforeInit.cmds->payload[1];
+					break;
+			}
+			break;
+			break;
+		default:
+			break;
+	}
+
+	if (enable == 1)
+	{
+		switch (ctrl_pdata->panel_data.panel_info.pid)
+		{
+			case FIH_NT35521S_720P_VIDEO_PANEL:
+				ctrl_pdata->ce_on_cmds_beforeInit.cmds->payload[1] = (ctrl_pdata->ce_on_cmds_beforeInit.cmds->payload[1] & 0xF0) | (cabc_mode & 0x0F);
+				break;
+			default:
+				break;
+		}
+
+		len = mdss_dsi_panel_cmds_send(ctrl_pdata, &ctrl_pdata->ce_on_cmds_beforeInit, CMD_REQ_COMMIT);
+	}
+	else if (enable == 0)
+	{
+		switch (ctrl_pdata->panel_data.panel_info.pid)
+		{
+			case FIH_NT35521S_720P_VIDEO_PANEL:
+				ctrl_pdata->ce_off_cmds_beforeInit.cmds->payload[1] = (ctrl_pdata->ce_off_cmds_beforeInit.cmds->payload[1] & 0xF0) | (cabc_mode & 0x0F);
+				break;
+			default:
+				break;
+		}
+
+		len = mdss_dsi_panel_cmds_send(ctrl_pdata, &ctrl_pdata->ce_off_cmds_beforeInit, CMD_REQ_COMMIT);
+	}
+	else
+	{
+		pr_err("\n\n*** %s, Invlid input parameter ***\n\n", __func__);
+		return -EINVAL;
+	}
+
+	ce_status = enable;	//Display-FixCeCtNotWorkInAndroidO-FixedValueSinceNoUIForCeCtAlready-00+_20171107
+
+	pr_debug("\n\n******************** [HL] %s ---, len = %d **********************\n\n", __func__, len);
+
+	return len;
+}
+
+static int mdss_dsi_panel_ct_set_BeforeInit(struct mdss_dsi_ctrl_pdata *ctrl_pdata, unsigned long value)
+{
+	int len = 1;
+
+	pr_debug("\n\n*** [HL] %s, value = %ld ***\n\n", __func__,value);
+
+	switch (value)
+	{
+		case COLOR_TEMP_NORMAL:
+			len = mdss_dsi_panel_cmds_send(ctrl_pdata, &ctrl_pdata->ct_normal_cmds_beforeInit, CMD_REQ_COMMIT);
+			break;
+		case COLOR_TEMP_WARM:
+			len = mdss_dsi_panel_cmds_send(ctrl_pdata, &ctrl_pdata->ct_warm_cmds_beforeInit, CMD_REQ_COMMIT);
+			break;
+		case COLOR_TEMP_COLD:
+			len = mdss_dsi_panel_cmds_send(ctrl_pdata, &ctrl_pdata->ct_cold_cmds_beforeInit, CMD_REQ_COMMIT);
+			break;
+		case BL_FILTER_DISABLE:
+			len = mdss_dsi_panel_cmds_send(ctrl_pdata, &ctrl_pdata->ct_normal_cmds_beforeInit, CMD_REQ_COMMIT);
+			break;
+		case BL_FILTER_10:
+			len = mdss_dsi_panel_cmds_send(ctrl_pdata, &ctrl_pdata->blf_10_cmds_beforeInit, CMD_REQ_COMMIT);
+			break;
+		case BL_FILTER_30:
+			len = mdss_dsi_panel_cmds_send(ctrl_pdata, &ctrl_pdata->blf_30_cmds_beforeInit, CMD_REQ_COMMIT);
+			break;
+		case BL_FILTER_50:
+			len = mdss_dsi_panel_cmds_send(ctrl_pdata, &ctrl_pdata->blf_50_cmds_beforeInit, CMD_REQ_COMMIT);
+			break;
+		case BL_FILTER_75:
+			len = mdss_dsi_panel_cmds_send(ctrl_pdata, &ctrl_pdata->blf_75_cmds_beforeInit, CMD_REQ_COMMIT);
+			break;
+		default:
+			pr_err("%s: unhandled value=%ld\n", __func__, value);
+			return -EINVAL;
+			break;
+	}
+
+	pr_debug("\n\n******************** [HL] %s ---, len = %d **********************\n\n", __func__, len);
+
+	return len;
+}
+
+static int mdss_dsi_panel_cabc_set_BeforeInit(struct mdss_dsi_ctrl_pdata *ctrl_pdata, unsigned long value)
+{
+	int len = 1;
+	int image_enhance = 0;
+
+	pr_debug("\n\n*** [HL] %s, value = %ld ***\n\n", __func__,value);
+	pr_debug("[HL]%s: ce_status = %d\n", __func__, ce_status);
+
+	switch (ctrl_pdata->panel_data.panel_info.pid)
+	{
+		case FIH_NT35521S_720P_VIDEO_PANEL:
+			if (ce_status)
+			{
+				image_enhance = ctrl_pdata->ce_on_cmds_beforeInit.cmds->payload[1];
+			}
+			else
+			{
+				image_enhance = ctrl_pdata->ce_off_cmds_beforeInit.cmds->payload[1];
+			}
+			break;
+		default:
+			break;
+	}
+
+	switch (value)
+	{
+		case CABC_OFF:
+			{
+				switch (ctrl_pdata->panel_data.panel_info.pid)
+				{
+					case FIH_NT35521S_720P_VIDEO_PANEL:
+						ctrl_pdata->cabc_off_cmds_beforeInit.cmds->payload[1] = (image_enhance & 0xF0) | (ctrl_pdata->cabc_off_cmds_beforeInit.cmds->payload[1] & 0x0F);
+						break;
+					default:
+						break;
+				}
+
+				len = mdss_dsi_panel_cmds_send(ctrl_pdata, &ctrl_pdata->cabc_off_cmds_beforeInit, CMD_REQ_COMMIT);
+			}
+			break;
+		case CABC_UI:
+			{
+				switch (ctrl_pdata->panel_data.panel_info.pid)
+				{
+					case FIH_NT35521S_720P_VIDEO_PANEL:
+						ctrl_pdata->cabc_ui_cmds_beforeInit.cmds->payload[1] = (image_enhance & 0xF0) | (ctrl_pdata->cabc_ui_cmds_beforeInit.cmds->payload[1] & 0x0F);
+						break;
+					default:
+						break;
+				}
+
+				len = mdss_dsi_panel_cmds_send(ctrl_pdata, &ctrl_pdata->cabc_ui_cmds_beforeInit, CMD_REQ_COMMIT);
+			}
+			break;
+		case CABC_STILL:
+			{
+				switch (ctrl_pdata->panel_data.panel_info.pid)
+				{
+					case FIH_NT35521S_720P_VIDEO_PANEL:
+						ctrl_pdata->cabc_still_cmds_beforeInit.cmds->payload[1] = (image_enhance & 0xF0) | (ctrl_pdata->cabc_still_cmds_beforeInit.cmds->payload[1] & 0x0F);
+						break;
+					default:
+						break;
+				}
+
+				len = mdss_dsi_panel_cmds_send(ctrl_pdata, &ctrl_pdata->cabc_still_cmds_beforeInit, CMD_REQ_COMMIT);
+			}
+			break;
+		case CABC_MOVING:
+			{
+				switch (ctrl_pdata->panel_data.panel_info.pid)
+				{
+					case FIH_NT35521S_720P_VIDEO_PANEL:
+						ctrl_pdata->cabc_moving_cmds_beforeInit.cmds->payload[1] = (image_enhance & 0xF0) | (ctrl_pdata->cabc_moving_cmds_beforeInit.cmds->payload[1] & 0x0F);
+						break;
+					default:
+						break;
+				}
+
+				len = mdss_dsi_panel_cmds_send(ctrl_pdata, &ctrl_pdata->cabc_moving_cmds_beforeInit, CMD_REQ_COMMIT);
+			}
+			break;
+		default:
+			pr_err("%s: unhandled value=%ld\n", __func__, value);
+			return -EINVAL;
+			break;
+	}
+
+	pr_debug("\n\n******************** [HL] %s ---, len = %d **********************\n\n", __func__, len);
+
+	return len;
+}
+//Display-SendCECTCABCBeforeInit-00+}_20161213
+
+//Display-ImplementCECTCABC-00+{_20160126
+int mdss_dsi_panel_ce_onoff(struct mdss_dsi_ctrl_pdata *ctrl_pdata, unsigned long enable)
+{
+	int len = 1;
+	int cabc_mode = 0;
+
+	pr_debug("\n\n*** [HL] %s, enable = %ld ***\n\n", __func__,enable);
+
+	if (!(ctrl_pdata->ctrl_state & CTRL_STATE_PANEL_INIT))
+	{
+		pr_err("%s, panel not init yet, not allow to set CE command!\n", __func__);
+		return -EBUSY;
+	}
+	else
+	{
+		pr_debug("\n\n*** [HL] %s, panel already init, allow to set CE command! ***\n\n", __func__);
+	}
+
+	switch (ctrl_pdata->panel_data.panel_info.pid)
+	{
+		case FIH_NT35521S_720P_VIDEO_PANEL:
+			switch (cabc_status)
+			{
+				case CABC_OFF:
+					cabc_mode = ctrl_pdata->cabc_off_cmds.cmds->payload[1];
+					break;
+				case CABC_UI:
+					cabc_mode = ctrl_pdata->cabc_ui_cmds.cmds->payload[1];
+					break;
+				case CABC_STILL:
+					cabc_mode = ctrl_pdata->cabc_still_cmds.cmds->payload[1];
+					break;
+				case CABC_MOVING:
+					cabc_mode = ctrl_pdata->cabc_moving_cmds.cmds->payload[1];
+					break;
+			}
+			break;
+		case FIH_PJ050IA_NT35521S_720P_VIDEO_PANEL:
+			switch (cabc_status)
+			{
+				case CABC_OFF:
+					cabc_mode = ctrl_pdata->cabc_off_cmds.cmds->payload[19];
+					break;
+				case CABC_UI:
+					cabc_mode = ctrl_pdata->cabc_ui_cmds.cmds->payload[19];
+					break;
+				case CABC_STILL:
+					cabc_mode = ctrl_pdata->cabc_still_cmds.cmds->payload[19];
+					break;
+				case CABC_MOVING:
+					cabc_mode = ctrl_pdata->cabc_moving_cmds.cmds->payload[19];
+					break;
+			}
+			break;
+		default:
+			break;
+	}
+
+	if (enable == 1)
+	{
+		switch (ctrl_pdata->panel_data.panel_info.pid)
+		{
+			case FIH_NT35521S_720P_VIDEO_PANEL:
+				ctrl_pdata->ce_on_cmds.cmds->payload[1] = (ctrl_pdata->ce_on_cmds.cmds->payload[1] & 0xF0) | (cabc_mode & 0x0F);
+				break;
+			case FIH_PJ050IA_NT35521S_720P_VIDEO_PANEL:
+				ctrl_pdata->ce_on_cmds.cmds->payload[19] = (ctrl_pdata->ce_on_cmds.cmds->payload[19] & 0xF0) | (cabc_mode & 0x0F);
+				break;
+			default:
+				break;
+		}
+
+		len = mdss_dsi_panel_cmds_send(ctrl_pdata, &ctrl_pdata->ce_on_cmds, CMD_REQ_COMMIT);
+	}
+	else if (enable == 0)
+	{
+		switch (ctrl_pdata->panel_data.panel_info.pid)
+		{
+			case FIH_NT35521S_720P_VIDEO_PANEL:
+				ctrl_pdata->ce_off_cmds.cmds->payload[1] = (ctrl_pdata->ce_off_cmds.cmds->payload[1] & 0xF0) | (cabc_mode & 0x0F);
+				break;
+			case FIH_PJ050IA_NT35521S_720P_VIDEO_PANEL:
+				ctrl_pdata->ce_off_cmds.cmds->payload[19] = (ctrl_pdata->ce_off_cmds.cmds->payload[19] & 0xF0) | (cabc_mode & 0x0F);
+				break;
+			default:
+				break;
+		}
+
+		len = mdss_dsi_panel_cmds_send(ctrl_pdata, &ctrl_pdata->ce_off_cmds, CMD_REQ_COMMIT);
+	}
+	else
+	{
+		pr_err("\n\n*** %s, Invlid input parameter ***\n\n", __func__);
+		return -EINVAL;
+	}
+
+	ce_status = enable;
+
+	pr_debug("\n\n******************** [HL] %s ---, len = %d **********************\n\n", __func__, len);
+
+	return len;
+}
+
+int mdss_dsi_panel_ct_set(struct mdss_dsi_ctrl_pdata *ctrl_pdata, unsigned long value)
+{
+	int len = 1;
+
+	pr_debug("\n\n*** [HL] %s, value = %ld ***\n\n", __func__,value);
+
+	if (!(ctrl_pdata->ctrl_state & CTRL_STATE_PANEL_INIT))
+	{
+		pr_err("%s, panel not init yet, not allow to set CT command!\n", __func__);
+		return -EBUSY;
+	}
+	else
+	{
+		pr_debug("\n\n*** [HL] %s, panel already init, allow to set CT command! ***\n\n", __func__);
+	}
+
+	switch (value)
+	{
+		case COLOR_TEMP_NORMAL:
+			len = mdss_dsi_panel_cmds_send(ctrl_pdata, &ctrl_pdata->ct_normal_cmds, CMD_REQ_COMMIT);
+			break;
+		case COLOR_TEMP_WARM:
+			len = mdss_dsi_panel_cmds_send(ctrl_pdata, &ctrl_pdata->ct_warm_cmds, CMD_REQ_COMMIT);
+			break;
+		case COLOR_TEMP_COLD:
+			len = mdss_dsi_panel_cmds_send(ctrl_pdata, &ctrl_pdata->ct_cold_cmds, CMD_REQ_COMMIT);
+			break;
+		case BL_FILTER_DISABLE:
+			len = mdss_dsi_panel_cmds_send(ctrl_pdata, &ctrl_pdata->ct_normal_cmds, CMD_REQ_COMMIT);
+			break;
+		case BL_FILTER_10:
+			len = mdss_dsi_panel_cmds_send(ctrl_pdata, &ctrl_pdata->blf_10_cmds, CMD_REQ_COMMIT);
+			break;
+		case BL_FILTER_30:
+			len = mdss_dsi_panel_cmds_send(ctrl_pdata, &ctrl_pdata->blf_30_cmds, CMD_REQ_COMMIT);
+			break;
+		case BL_FILTER_50:
+			len = mdss_dsi_panel_cmds_send(ctrl_pdata, &ctrl_pdata->blf_50_cmds, CMD_REQ_COMMIT);
+			break;
+		case BL_FILTER_75:
+			len = mdss_dsi_panel_cmds_send(ctrl_pdata, &ctrl_pdata->blf_75_cmds, CMD_REQ_COMMIT);
+
+			break;
+		default:
+			pr_err("%s: unhandled value=%ld\n", __func__, value);
+			return -EINVAL;
+			break;
+	}
+
+	ct_status = value;
+
+	pr_debug("\n\n******************** [HL] %s ---, len = %d **********************\n\n", __func__, len);
+
+	return len;
+}
+
+int mdss_dsi_panel_cabc_set(struct mdss_dsi_ctrl_pdata *ctrl_pdata, unsigned long value)
+{
+	int len = 1;
+	int image_enhance = 0;
+
+	pr_debug("\n\n*** [HL] %s, value = %ld ***\n\n", __func__,value);
+
+	if (!(ctrl_pdata->ctrl_state & CTRL_STATE_PANEL_INIT))
+	{
+		pr_err("%s, panel not init yet, not allow to set CABC command!\n", __func__);
+		return -EBUSY;
+	}
+	else
+	{
+		pr_debug("\n\n*** [HL] %s, panel already init, allow to set CABC command! ***\n\n", __func__);
+	}
+
+	//Display-NT35597-Fix_JGR-5432-AvoidCabcOffCmdIsSentDuring0x28And0x11Cmd-00+{_20160601
+	if (DispOff) //Display-moveFeatureBeforeInitCommand
+	{
+		goto end;
+	}
+	//Display-NT35597-Fix_JGR-5432-AvoidCabcOffCmdIsSentDuring0x28And0x11Cmd-00+}_20160601
+
+	switch (ctrl_pdata->panel_data.panel_info.pid)
+	{
+		case FIH_NT35521S_720P_VIDEO_PANEL:
+			if (ce_status)
+			{
+				image_enhance = ctrl_pdata->ce_on_cmds.cmds->payload[1];
+			}
+			else
+			{
+				image_enhance = ctrl_pdata->ce_off_cmds.cmds->payload[1];
+			}
+			break;
+		case FIH_PJ050IA_NT35521S_720P_VIDEO_PANEL:
+			if (ce_status)
+			{
+				image_enhance = ctrl_pdata->ce_on_cmds.cmds->payload[19];
+			}
+			else
+			{
+				image_enhance = ctrl_pdata->ce_off_cmds.cmds->payload[19];
+			}
+			break;
+		default:
+			break;
+	}
+
+	switch (value)
+	{
+		case CABC_OFF:
+			{
+				switch (ctrl_pdata->panel_data.panel_info.pid)
+				{
+					case FIH_ILI7807E_1080P_VIDEO_PANEL:
+						ctrl_pdata->cabc_off_cmds.cmds->payload[12] = (image_enhance & 0xF0) | (ctrl_pdata->cabc_off_cmds.cmds->payload[12] & 0x0F);
+						break;
+					case FIH_NT35521S_720P_VIDEO_PANEL:
+						ctrl_pdata->cabc_off_cmds.cmds->payload[1] = (image_enhance & 0xF0) | (ctrl_pdata->cabc_off_cmds.cmds->payload[1] & 0x0F);
+						break;
+					case FIH_PJ050IA_NT35521S_720P_VIDEO_PANEL:
+						ctrl_pdata->cabc_off_cmds.cmds->payload[19] = (image_enhance & 0xF0) | (ctrl_pdata->cabc_off_cmds.cmds->payload[19] & 0x0F);
+						break;
+					default:
+						break;
+				}
+
+				len = mdss_dsi_panel_cmds_send(ctrl_pdata, &ctrl_pdata->cabc_off_cmds, CMD_REQ_COMMIT);
+			}
+			break;
+		case CABC_UI:
+			{
+				switch (ctrl_pdata->panel_data.panel_info.pid)
+				{
+					case FIH_ILI7807E_1080P_VIDEO_PANEL:
+						ctrl_pdata->cabc_ui_cmds.cmds->payload[12] = (image_enhance & 0xF0) | (ctrl_pdata->cabc_ui_cmds.cmds->payload[12] & 0x0F);
+						break;
+					case FIH_NT35521S_720P_VIDEO_PANEL:
+						ctrl_pdata->cabc_ui_cmds.cmds->payload[1] = (image_enhance & 0xF0) | (ctrl_pdata->cabc_ui_cmds.cmds->payload[1] & 0x0F);
+						break;
+					case FIH_PJ050IA_NT35521S_720P_VIDEO_PANEL:
+						ctrl_pdata->cabc_ui_cmds.cmds->payload[19] = (image_enhance & 0xF0) | (ctrl_pdata->cabc_ui_cmds.cmds->payload[19] & 0x0F);
+						break;
+					default:
+						break;
+				}
+
+				len = mdss_dsi_panel_cmds_send(ctrl_pdata, &ctrl_pdata->cabc_ui_cmds, CMD_REQ_COMMIT);
+			}
+			break;
+		case CABC_STILL:
+			{
+				switch (ctrl_pdata->panel_data.panel_info.pid)
+				{
+					case FIH_ILI7807E_1080P_VIDEO_PANEL:
+						ctrl_pdata->cabc_still_cmds.cmds->payload[12] = (image_enhance & 0xF0) | (ctrl_pdata->cabc_still_cmds.cmds->payload[12] & 0x0F);
+						break;
+					case FIH_NT35521S_720P_VIDEO_PANEL:
+						ctrl_pdata->cabc_still_cmds.cmds->payload[1] = (image_enhance & 0xF0) | (ctrl_pdata->cabc_still_cmds.cmds->payload[1] & 0x0F);
+						break;
+					case FIH_PJ050IA_NT35521S_720P_VIDEO_PANEL:
+						ctrl_pdata->cabc_still_cmds.cmds->payload[19] = (image_enhance & 0xF0) | (ctrl_pdata->cabc_still_cmds.cmds->payload[19] & 0x0F);
+						break;
+					default:
+						break;
+				}
+
+				len = mdss_dsi_panel_cmds_send(ctrl_pdata, &ctrl_pdata->cabc_still_cmds, CMD_REQ_COMMIT);
+			}
+			break;
+		case CABC_MOVING:
+			{
+				switch (ctrl_pdata->panel_data.panel_info.pid)
+				{
+					case FIH_ILI7807E_1080P_VIDEO_PANEL:
+						ctrl_pdata->cabc_moving_cmds.cmds->payload[12] = (image_enhance & 0xF0) | (ctrl_pdata->cabc_moving_cmds.cmds->payload[12] & 0x0F);
+						break;
+					case FIH_NT35521S_720P_VIDEO_PANEL:
+						ctrl_pdata->cabc_moving_cmds.cmds->payload[1] = (image_enhance & 0xF0) | (ctrl_pdata->cabc_moving_cmds.cmds->payload[1] & 0x0F);
+						break;
+					case FIH_PJ050IA_NT35521S_720P_VIDEO_PANEL:
+						ctrl_pdata->cabc_moving_cmds.cmds->payload[19] = (image_enhance & 0xF0) | (ctrl_pdata->cabc_moving_cmds.cmds->payload[19] & 0x0F);
+						break;
+					default:
+						break;
+				}
+
+				len = mdss_dsi_panel_cmds_send(ctrl_pdata, &ctrl_pdata->cabc_moving_cmds, CMD_REQ_COMMIT);
+			}
+			break;
+		default:
+			pr_err("%s: unhandled value=%ld\n", __func__, value);
+			return -EINVAL;
+			break;
+	}
+
+end:	//Display-NT35597-Fix_JGR-5432-AvoidCabcOffCmdIsSentDuring0x28And0x11Cmd-00+_20160601
+	cabc_status = value;
+
+	pr_debug("\n\n******************** [HL] %s ---, len = %d **********************\n\n", __func__, len);
+
+	return len;
+}
+//Display-ImplementCECTCABC-00+}_20160126
+
+//Display-DynamicReadWriteRegister-00+{_20160729
+static int tot_reg_val_len = 0;
+static char res_reg_val[2];
+void mdss_dsi_panel_read_reg_get(char *reg_val)
+{
+
+	if (tot_reg_val_len < 2)
+	{
+		sprintf(reg_val, "0x%x\n", res_reg_val[0]);
+	}
+	else
+	{
+		sprintf(reg_val, "0x%x,0x%x\n", res_reg_val[0], res_reg_val[1]);
+	}
+
+	pr_err("\n\n******************** [HL] %s ---, reg_val = (%s) **********************\n\n", __func__, reg_val);
+
+	return;
+}
+
+static char read_reg[2] = {0x0A, 0x00};
+void mdss_dsi_panel_read_reg_set(struct mdss_dsi_ctrl_pdata *ctrl_pdata, unsigned int reg, unsigned int reg_len)
+{
+	char *rx_buf;
+	int i = 0;
+
+	pr_err("\n\n*** [HL] %s, reg = 0x%x, reg_len = %d ***\n\n", __func__, reg, reg_len);
+
+	if (!(ctrl_pdata->ctrl_state & CTRL_STATE_PANEL_INIT))
+	{
+		pr_err("%s, panel not init yet, not allow to set read reg command!\n", __func__);
+		res_reg_val[0] = 0;
+		res_reg_val[1] = 0;
+		pr_err("%s, Clear the array which keeps the return value of lcm driver ic to 0x00!\n", __func__);
+		return;
+	}
+	else
+	{
+		pr_err("\n\n*** [HL] %s, panel already init, allow to set read reg command! ***\n\n", __func__);
+	}
+
+	rx_buf = kzalloc(PANEL_REG_ADDR_LEN, GFP_KERNEL);
+
+	read_reg[0] = reg;
+	mdss_dsi_panel_cmd_read(ctrl_pdata, read_reg[0], read_reg[1],
+					NULL, rx_buf, reg_len);
+
+	pr_err("%s: (reg, value) = (0x%x, 0x%x)\n", __func__, reg, rx_buf[0]);
+
+	//memcpy(res_reg_val, rx_buf, sizeof(res_reg_val));
+	for (i = 0; i < reg_len; i++)
+	{
+		res_reg_val[i] = rx_buf[i];
+	}
+	tot_reg_val_len = reg_len;
+
+	pr_err("\n\n******************** [HL] %s: res_reg_val = (0x%x) **********************\n\n", __func__, res_reg_val[0]);
+
+	kfree(rx_buf);
+
+	pr_err("\n\n******************** [HL] %s --- **********************\n\n", __func__);
+
+	return;
+}
+
+void mdss_dsi_panel_write_reg_set(struct mdss_dsi_ctrl_pdata *ctrl_pdata, unsigned int len, char *data)
+{
+	char *delim = ",";
+	char *token;
+	int i = 0;
+	long input = 0;
+
+	pr_err("\n\n*** [HL] %s, len = %d, data = (%s) ***\n\n", __func__, len, data);
+
+	if (!(ctrl_pdata->ctrl_state & CTRL_STATE_PANEL_INIT))
+	{
+		pr_err("%s, panel not init yet, not allow to set read reg command!\n", __func__);
+		return;
+	}
+	else
+	{
+		pr_err("\n\n*** [HL] %s, panel already init, allow to set read reg command! ***\n\n", __func__);
+	}
+
+	if (ctrl_pdata->write_reg_cmds.cmd_cnt)
+	{
+		//Dcs command length
+		ctrl_pdata->write_reg_cmds.blen = len;
+
+		//Dcs command register and data
+		for(token = strsep(&data, delim); token != NULL; token = strsep(&data, delim))
+		{
+			pr_err("\n\n******************** [HL] %s: data = %s **********************\n\n", __func__, token);
+			if (strict_strtol(token, 16, &input))
+			{
+				return;
+			}
+			ctrl_pdata->write_reg_cmds.cmds->payload[i] = input;
+
+			i++;
+		}
+
+		//Send Dcs command
+		mdss_dsi_panel_cmds_send(ctrl_pdata, &ctrl_pdata->write_reg_cmds, CMD_REQ_COMMIT);
+	}
+
+	pr_err("\n\n******************** [HL] %s ---**********************\n\n", __func__);
+
+	return;
+}
+//Display-DynamicReadWriteRegister-00+}_20160729
 
 static int mdss_dsi_panel_low_power_config(struct mdss_panel_data *pdata,
 	int enable)
@@ -2224,16 +3344,21 @@ int mdss_panel_parse_bl_settings(struct device_node *np,
 	int rc = 0;
 	u32 tmp;
 
+	pr_debug("\n\n******************** [HL] %s <-- START  **********************\n\n", __func__);
+
 	ctrl_pdata->bklt_ctrl = UNKNOWN_CTRL;
 	data = of_get_property(np, "qcom,mdss-dsi-bl-pmic-control-type", NULL);
+	pr_debug("\n\n******************** [HL] %s: data = (%s)  **********************\n\n", __func__, data);
 	if (data) {
 		if (!strcmp(data, "bl_ctrl_wled")) {
+			pr_debug("\n\n******************** [HL] %s: bl_ctrl_wled  **********************\n\n", __func__);
 			led_trigger_register_simple("bkl-trigger",
 				&bl_led_trigger);
 			pr_debug("%s: SUCCESS-> WLED TRIGGER register\n",
 				__func__);
 			ctrl_pdata->bklt_ctrl = BL_WLED;
 		} else if (!strcmp(data, "bl_ctrl_pwm")) {
+			pr_debug("\n\n******************** [HL] %s: bl_ctrl_pwm	**********************\n\n", __func__);
 			ctrl_pdata->bklt_ctrl = BL_PWM;
 			ctrl_pdata->pwm_pmi = of_property_read_bool(np,
 					"qcom,mdss-dsi-bl-pwm-pmi");
@@ -2270,11 +3395,15 @@ int mdss_panel_parse_bl_settings(struct device_node *np,
 								 __func__);
 			}
 		} else if (!strcmp(data, "bl_ctrl_dcs")) {
+			pr_debug("\n\n******************** [HL] %s: bl_ctrl_dcs	**********************\n\n", __func__);
 			ctrl_pdata->bklt_ctrl = BL_DCS_CMD;
 			pr_debug("%s: Configured DCS_CMD bklt ctrl\n",
 								__func__);
 		}
 	}
+
+	pr_debug("\n\n******************** [HL] %s <-- END  **********************\n\n", __func__);
+
 	return 0;
 }
 
@@ -2593,6 +3722,22 @@ static int mdss_panel_parse_dt(struct device_node *np,
 	static const char *pdest;
 	struct mdss_panel_info *pinfo = &(ctrl_pdata->panel_data.panel_info);
 
+	pr_debug("\n\n******************** [HL] %s +++ **********************\n\n", __func__);
+
+	//Display-ImplementPanelID-00+{_20151112
+	rc = of_property_read_u32(np, "fih,panel-id", &tmp);
+	if (rc) {
+		pr_err("%s:%d, panel id not specified\n",
+						__func__, __LINE__);
+		return -EINVAL;
+	}
+	else
+	{
+		pr_debug("\n\n******************** [HL] %s of_property_read_u32(np, \"fih,panel-id\", &tmp), tmp = %d **********************\n\n", __func__, tmp);
+	}
+	pinfo->pid = (!rc ? tmp : 0);
+	//Display-ImplementPanelID-00+}_20151112
+
 	if (mdss_dsi_is_hw_config_split(ctrl_pdata->shared_data))
 		pinfo->is_split_display = true;
 
@@ -2602,6 +3747,15 @@ static int mdss_panel_parse_dt(struct device_node *np,
 	rc = of_property_read_u32(np,
 		"qcom,mdss-pan-physical-height-dimension", &tmp);
 	pinfo->physical_height = (!rc ? tmp : 0);
+
+	//Display-CTS_Xdpi_Ydpi-00+{_20151112
+	rc = of_property_read_u32(np,
+		"qcom,mdss-pan-physical-width-dimension-full", &tmp);
+	pinfo->physical_width_full = (!rc ? tmp : 0);
+	rc = of_property_read_u32(np,
+		"qcom,mdss-pan-physical-height-dimension-full", &tmp);
+	pinfo->physical_height_full = (!rc ? tmp : 0);
+	//Display-CTS_Xdpi_Ydpi-00+}_20151112
 
 	rc = of_property_read_u32(np, "qcom,mdss-dsi-bpp", &tmp);
 	if (rc) {
@@ -2649,6 +3803,10 @@ static int mdss_panel_parse_dt(struct device_node *np,
 			pinfo->panel_orientation = MDP_FLIP_UD;
 	}
 
+//gatycclu - MA3-589 - Apply SHARP backlight mapping rule {
+	pinfo->sharp_bl_mapping = of_property_read_bool(np,
+		"fih,sharp-backlight-mapping-rule");
+//gatycclu - MA3-589 - Apply SHARP backlight mapping rule }
 	rc = of_property_read_u32(np, "qcom,mdss-brightness-max-level", &tmp);
 	pinfo->brightness_max = (!rc ? tmp : MDSS_MAX_BL_BRIGHTNESS);
 	rc = of_property_read_u32(np, "qcom,mdss-dsi-bl-min-level", &tmp);
@@ -2827,9 +3985,87 @@ static int mdss_panel_parse_dt(struct device_node *np,
 	if (rc)
 		goto error;
 
+	//Display-ImplementCECTCABC-00+{_20160126
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->ce_on_cmds,
+		"qcom,mdss-dsi-ce-on-command", "qcom,mdss-dsi-ce-on-command-state");
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->ce_off_cmds,
+		"qcom,mdss-dsi-ce-off-command", "qcom,mdss-dsi-ce-off-command-state");
+
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->ct_normal_cmds,
+		"qcom,mdss-dsi-ct-normal-command", "qcom,mdss-dsi-ct-normal-command-state");
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->ct_warm_cmds,
+		"qcom,mdss-dsi-ct-warm-command", "qcom,mdss-dsi-ct-warm-command-state");
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->ct_cold_cmds,
+		"qcom,mdss-dsi-ct-cold-command", "qcom,mdss-dsi-ct-cold-command-state");
+
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->blf_10_cmds,
+		"qcom,mdss-dsi-blf-10-command", "qcom,mdss-dsi-blf-10-command-state");
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->blf_30_cmds,
+		"qcom,mdss-dsi-blf-30-command", "qcom,mdss-dsi-blf-30-command-state");
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->blf_50_cmds,
+		"qcom,mdss-dsi-blf-50-command", "qcom,mdss-dsi-blf-50-command-state");
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->blf_75_cmds,
+		"qcom,mdss-dsi-blf-75-command", "qcom,mdss-dsi-blf-75-command-state");
+
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->cabc_off_cmds,
+		"qcom,mdss-dsi-cabc-off-command", "qcom,mdss-dsi-cabc-off-command-state");
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->cabc_ui_cmds,
+		"qcom,mdss-dsi-cabc-ui-command", "qcom,mdss-dsi-cabc-ui-command-state");
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->cabc_still_cmds,
+		"qcom,mdss-dsi-cabc-still-command", "qcom,mdss-dsi-cabc-still-command-state");
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->cabc_moving_cmds,
+		"qcom,mdss-dsi-cabc-moving-command", "qcom,mdss-dsi-cabc-moving-command-state");
+	//Display-ImplementCECTCABC-00+}_20160126
+
+	//Display-SendCECTCABCBeforeInit-00*{_20161213
+	//Display-moveFeatureBeforeInitCommand start
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->ce_on_cmds_beforeInit,
+		"qcom,mdss-dsi-ce-on-command-BeforeInit", "qcom,mdss-dsi-ce-on-command-state-BeforeInit");
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->ce_off_cmds_beforeInit,
+		"qcom,mdss-dsi-ce-off-command-BeforeInit", "qcom,mdss-dsi-ce-off-command-state-BeforeInit");
+
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->ct_normal_cmds_beforeInit,
+		"qcom,mdss-dsi-ct-normal-command-BeforeInit", "qcom,mdss-dsi-ct-normal-command-state-BeforeInit");
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->ct_warm_cmds_beforeInit,
+		"qcom,mdss-dsi-ct-warm-command-BeforeInit", "qcom,mdss-dsi-ct-warm-command-state-BeforeInit");
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->ct_cold_cmds_beforeInit,
+		"qcom,mdss-dsi-ct-cold-command-BeforeInit", "qcom,mdss-dsi-ct-cold-command-state-BeforeInit");
+
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->blf_10_cmds_beforeInit,
+		"qcom,mdss-dsi-blf-10-command-BeforeInit", "qcom,mdss-dsi-blf-10-command-state-BeforeInit");
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->blf_30_cmds_beforeInit,
+		"qcom,mdss-dsi-blf-30-command-BeforeInit", "qcom,mdss-dsi-blf-30-command-state-BeforeInit");
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->blf_50_cmds_beforeInit,
+		"qcom,mdss-dsi-blf-50-command-BeforeInit", "qcom,mdss-dsi-blf-50-command-state-BeforeInit");
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->blf_75_cmds_beforeInit,
+		"qcom,mdss-dsi-blf-75-command-BeforeInit", "qcom,mdss-dsi-blf-75-command-state-BeforeInit");
+
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->cabc_off_cmds_beforeInit,
+		"qcom,mdss-dsi-cabc-off-command-BeforeInit", "qcom,mdss-dsi-cabc-off-command-state-BeforeInit");
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->cabc_ui_cmds_beforeInit,
+		"qcom,mdss-dsi-cabc-ui-command-BeforeInit", "qcom,mdss-dsi-cabc-ui-command-state-BeforeInit");
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->cabc_still_cmds_beforeInit,
+		"qcom,mdss-dsi-cabc-still-command-BeforeInit", "qcom,mdss-dsi-cabc-still-command-state-BeforeInit");
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->cabc_moving_cmds_beforeInit,
+		"qcom,mdss-dsi-cabc-moving-command-BeforeInit", "qcom,mdss-dsi-cabc-moving-command-state-BeforeInit");
+	//Display-moveFeatureBeforeInitCommand end
+	//Display-SendCECTCABCBeforeInit-00*}_20161213
+
+	//Display-ShowLCMAndBacklightStatus-00+_20160304
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->switch_cmdpage_cmds,
+		"fih,mdss-dsi-switch-cmdpage-command", "fih,mdss-dsi-switch-cmdpage-command-state");
+
+	//Display-DynamicReadWriteRegister-00+_20160729
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->write_reg_cmds,
+		"fih,mdss-dsi-write-reg-command", "fih,mdss-dsi-write-reg-command-state");
+
+	pr_debug("\n\n******************** [HL] %s ---, OK return 0 **********************\n\n", __func__);
+
 	return 0;
 
 error:
+	pr_debug("\n\n******************** [HL] %s ---, return -EINVAL **********************\n\n", __func__);
+
 	return -EINVAL;
 }
 

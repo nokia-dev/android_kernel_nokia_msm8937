@@ -1,0 +1,35 @@
+/*
+ * Copyright (c) 2016, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+#include "msm8937-fih-D1-v0.dtsi"
+
+&soc {
+
+  //TP: NV11206
+	i2c@78b7000 {
+	  status = "ok";
+	  /delete-node/ synaptics@20;
+	  #include "components/touch/touch_novatek_i2c_0x62_v0.dtsi"
+	};
+    /*add for Use MI2S quin D1 as RX, D0 as Tx*/
+        qcom,msm-dai-mi2s {
+          dai_mi2s3: qcom,msm-dai-q6-mi2s-quat{
+            qcom,msm-mi2s-rx-lines = <2>;
+            qcom,msm-mi2s-tx-lines = <1>;
+          };
+        };
+
+  goodix_gf318m {
+    goodix,key-customer-define = <2>;
+  };
+};

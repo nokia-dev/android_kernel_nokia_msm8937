@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -32,6 +32,8 @@
 #include "../codecs/msm8x16-wcd.h"
 #include "../codecs/wsa881x-analog.h"
 #include <linux/regulator/consumer.h>
+/* 20160413,  add for ExtSpkAmp flag*/
+#include <linux/proc_fs.h>
 #define DRV_NAME "msm8952-asoc-wcd"
 
 #define BTSCO_RATE_8KHZ 8000
@@ -57,6 +59,15 @@ enum btsco_rates {
 	RATE_8KHZ_ID,
 	RATE_16KHZ_ID,
 };
+/*MM-ChrisYKLu-MS3BringUp-00+{ */
+static int vdd_spkr_gpio = -1;
+static int switch_en_gpio = -1;
+static int switch_in_gpio = -1;
+/*MM-ChrisYKLu-MS3BringUp-00+} */
+
+/* 20160822,  add for earprice switch*/
+static int ear_switch_en_gpio = -1;
+static int ear_switch_in_gpio = -1;
 
 static int msm8952_auxpcm_rate = 8000;
 static int msm_btsco_rate = BTSCO_RATE_8KHZ;
@@ -68,6 +79,13 @@ static int msm_vi_feed_tx_ch = 2;
 static int mi2s_rx_bit_format = SNDRV_PCM_FORMAT_S16_LE;
 static int mi2s_rx_bits_per_sample = 16;
 static int mi2s_rx_sample_rate = SAMPLING_RATE_48KHZ;
+
+//static int quat_mi2s_rx_bit_format = SNDRV_PCM_FORMAT_S24_LE;
+/* 20160413,  add for ExtSpkAmp flag*/
+static int ext_spk_amp_support = 0;
+
+/* 20160902,  add for quat channel*/
+static int msm_quat_mi2s_rx_ch = 1;
 
 static atomic_t quat_mi2s_clk_ref;
 static atomic_t quin_mi2s_clk_ref;
@@ -94,14 +112,14 @@ static struct wcd_mbhc_config mbhc_cfg = {
 	.swap_gnd_mic = NULL,
 	.hs_ext_micbias = false,
 	.key_code[0] = KEY_MEDIA,
-	.key_code[1] = KEY_VOICECOMMAND,
-	.key_code[2] = KEY_VOLUMEUP,
-	.key_code[3] = KEY_VOLUMEDOWN,
+	.key_code[1] = KEY_VOLUMEUP,
+	.key_code[2] = KEY_VOLUMEDOWN,
+	.key_code[3] = 0,
 	.key_code[4] = 0,
 	.key_code[5] = 0,
 	.key_code[6] = 0,
 	.key_code[7] = 0,
-	.linein_th = 5000,
+	.linein_th = 27000,
 };
 
 static struct afe_clk_cfg mi2s_rx_clk_v1 = {
@@ -171,6 +189,13 @@ static const char *const proxy_rx_ch_text[] = {"One", "Two", "Three", "Four",
 static const char *const vi_feed_ch_text[] = {"One", "Two"};
 static char const *mi2s_rx_sample_rate_text[] = {"KHZ_48",
 					"KHZ_96", "KHZ_192"};
+static const char *const spk_function[] = {"Off", "On"};/*MM-ChrisYKLu-MS3BringUp-00+ */
+static const char *const switch_en_function[] = {"Off", "On"};/*MM-ChrisYKLu-MS3BringUp-00+ */
+static const char *const switch_in_function[] = {"Off", "On"};/*MM-ChrisYKLu-MS3BringUp-00+ */
+
+/* 20160822,  add for earprice switch*/
+static const char *const ear_switch_en_function[] = {"Off", "On"};
+static const char *const ear_switch_in_function[] = {"Off", "On"};
 
 static inline int param_is_mask(int p)
 {
@@ -194,6 +219,43 @@ static void param_set_mask(struct snd_pcm_hw_params *p, int n, unsigned bit)
 		m->bits[1] = 0;
 		m->bits[bit >> 5] |= (1 << (bit & 31));
 	}
+}
+/* 20160413,  add for ExtSpkAmp flag*/
+static int fih_ext_spk_amp_read_proc(struct seq_file *m, void *v)
+{
+	if(ext_spk_amp_support)
+		seq_printf(m, "Support\n");
+	else
+		seq_printf(m, "Not Support\n");
+	return 0;
+}
+static int fih_ext_spk_amp_proc_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, fih_ext_spk_amp_read_proc, NULL);
+};
+
+static struct file_operations ext_spk_amp_proc_file_ops = {
+	.owner   = THIS_MODULE,
+	.open    = fih_ext_spk_amp_proc_open,
+	.read    = seq_read,
+	.llseek  = seq_lseek,
+	.release = single_release
+};
+static int fih_ext_spk_amp_init(struct platform_device *pdev)
+{
+	ext_spk_amp_support = of_property_read_bool(pdev->dev.of_node, "fih,ext-spk-amp-support");
+
+	if (proc_create("AllHWList/ExtSpkAmp", 0, NULL, &ext_spk_amp_proc_file_ops) == NULL)
+	{
+		proc_mkdir("AllHWList", NULL);
+		if (proc_create("AllHWList/ExtSpkAmp", 0, NULL, &ext_spk_amp_proc_file_ops) == NULL)
+		{
+			printk(KERN_ERR "fail to create proc/%s\n", "AllHWList/ExtSpkAmp");
+			return (1);
+		}
+	}
+
+	return 0;
 }
 
 static const struct snd_soc_dapm_widget msm8952_dapm_widgets[] = {
@@ -256,6 +318,10 @@ int is_ext_spk_gpio_support(struct platform_device *pdev,
 				__func__, pdata->spk_ext_pa_gpio);
 			return -EINVAL;
 		}
+		/* MM-ChrisYKLu-popnoise-00+{ */
+		vdd_spkr_gpio=pdata->spk_ext_pa_gpio;
+		msm8x16_update_int_spk_boost(false);
+		/* MM-ChrisYKLu-popnoise-00+} */
 	}
 	return 0;
 }
@@ -295,6 +361,167 @@ static int enable_spk_ext_pa(struct snd_soc_codec *codec, int enable)
 	return 0;
 }
 
+/* MM-ChrisYKLu-headphoneSwitch-00+{ */
+int is_headphone_switch_gpio_support(struct platform_device *pdev,
+			struct msm8916_asoc_mach_data *pdata)
+{
+	const char *hp_switch_en = "qcom,msm-hp-switch-en";
+	const char *hp_switch_in = "qcom,msm-hp-switch-in";
+
+	pr_err("%s:Enter\n", __func__);
+
+	pdata->hp_switch_en_gpio = of_get_named_gpio(pdev->dev.of_node,
+				hp_switch_en, 0);
+
+	if (pdata->hp_switch_en_gpio < 0) {
+		dev_dbg(&pdev->dev,
+			"%s: missing %s in dt node\n", __func__, hp_switch_en);
+	} else {
+		if (!gpio_is_valid(pdata->hp_switch_en_gpio)) {
+			pr_err("%s: Invalid switch-en gpio: %d",
+				__func__, pdata->hp_switch_en_gpio);
+			return -EINVAL;
+		}
+		switch_en_gpio = pdata->hp_switch_en_gpio;
+		gpio_direction_output(pdata->hp_switch_en_gpio, 0);
+	}
+
+	pdata->hp_switch_in_gpio = of_get_named_gpio(pdev->dev.of_node,
+				hp_switch_in, 0);
+
+	if (pdata->hp_switch_in_gpio < 0) {
+		dev_dbg(&pdev->dev,
+			"%s: missing %s in dt node\n", __func__, hp_switch_in);
+	} else {
+		if (!gpio_is_valid(pdata->hp_switch_in_gpio)) {
+			pr_err("%s: Invalid switch-in gpio: %d",
+				__func__, pdata->hp_switch_in_gpio);
+			return -EINVAL;
+		}
+		switch_in_gpio = pdata->hp_switch_in_gpio;
+		gpio_direction_output(pdata->hp_switch_in_gpio, 0);
+	}
+
+	return 0;
+}
+
+static int enable_headphone_switch(struct snd_soc_codec *codec, int enable)
+{
+	struct snd_soc_card *card = codec->component.card;
+	struct msm8916_asoc_mach_data *pdata = snd_soc_card_get_drvdata(card);
+	int ret;
+
+	if (!gpio_is_valid(pdata->hp_switch_en_gpio)) {
+		pr_err("%s: Invalid gpio: %d\n", __func__,
+			pdata->hp_switch_en_gpio);
+		return false;
+	}
+
+	pr_err("%s: %s headphone_switch\n", __func__,
+		enable ? "Enable" : "Disable");
+
+	if (enable) {
+		ret = msm_gpioset_activate(CLIENT_WCD_INT, "hp_switch_gpio");
+		if (ret) {
+			pr_err("%s: gpio set cannot be activated %s\n",
+					__func__, "hp_switch_gpio");
+			return ret;
+		}
+		gpio_set_value_cansleep(pdata->hp_switch_en_gpio, enable);
+		gpio_set_value_cansleep(pdata->hp_switch_in_gpio, enable);
+	} else {
+		gpio_set_value_cansleep(pdata->hp_switch_in_gpio, enable);
+		gpio_set_value_cansleep(pdata->hp_switch_en_gpio, enable);
+		ret = msm_gpioset_suspend(CLIENT_WCD_INT, "hp_switch_gpio");
+		if (ret) {
+			pr_err("%s: gpio set cannot be de-activated %s\n",
+					__func__, "hp_switch_gpio");
+			return ret;
+		}
+	}
+	return 0;
+}
+/* MM-ChrisYKLu-headphoneSwitch-00+} */
+
+/* 20160822,  add for earprice switch*/
+int is_ear_switch_gpio_support(struct platform_device *pdev,
+			struct msm8916_asoc_mach_data *pdata)
+{
+	const char *ear_switch_en = "qcom,msm-ear-switch-en";
+	const char *ear_switch_in = "qcom,msm-ear-switch-in";
+
+	pr_err("%s:Enter\n", __func__);
+
+	pdata->ear_switch_en_gpio = of_get_named_gpio(pdev->dev.of_node,
+				ear_switch_en, 0);
+
+	if (pdata->ear_switch_en_gpio < 0) {
+		dev_dbg(&pdev->dev,
+			"%s: missing %s in dt node\n", __func__, ear_switch_en);
+	} else {
+		if (!gpio_is_valid(pdata->ear_switch_en_gpio)) {
+			pr_err("%s: Invalid ear switch-en gpio: %d",
+				__func__, pdata->ear_switch_en_gpio);
+			return -EINVAL;
+		}
+		ear_switch_en_gpio = pdata->ear_switch_en_gpio;
+	}
+
+	pdata->ear_switch_in_gpio = of_get_named_gpio(pdev->dev.of_node,
+				ear_switch_in, 0);
+
+	if (pdata->ear_switch_in_gpio < 0) {
+		dev_dbg(&pdev->dev,
+			"%s: missing %s in dt node\n", __func__, ear_switch_in);
+	} else {
+		if (!gpio_is_valid(pdata->ear_switch_in_gpio)) {
+			pr_err("%s: Invalid ear switch-in gpio: %d",
+				__func__, pdata->ear_switch_in_gpio);
+			return -EINVAL;
+		}
+		ear_switch_in_gpio = pdata->ear_switch_in_gpio;
+	}
+
+	return 0;
+}
+
+static int enable_ear_switch(struct snd_soc_codec *codec, int enable)
+{
+	struct snd_soc_card *card = codec->component.card;
+	struct msm8916_asoc_mach_data *pdata = snd_soc_card_get_drvdata(card);
+	int ret;
+
+	if (!gpio_is_valid(pdata->ear_switch_en_gpio)) {
+		pr_err("%s: Invalid gpio: %d\n", __func__,
+			pdata->ear_switch_en_gpio);
+		return false;
+	}
+
+	pr_err("%s: %s earprice\n", __func__,
+		enable ? "Enable" : "Disable");
+
+	if (enable) {
+		ret = msm_gpioset_activate(CLIENT_WCD_INT, "ear_switch");
+		if (ret) {
+			pr_err("%s: gpio set cannot be activated %s\n",
+					__func__, "ear_switch");
+			return ret;
+		}
+		gpio_set_value_cansleep(pdata->ear_switch_en_gpio, enable);
+		gpio_set_value_cansleep(pdata->ear_switch_in_gpio, enable);
+	} else {
+		gpio_set_value_cansleep(pdata->ear_switch_in_gpio, enable);
+		gpio_set_value_cansleep(pdata->ear_switch_en_gpio, enable);
+		ret = msm_gpioset_suspend(CLIENT_WCD_INT, "ear_switch");
+		if (ret) {
+			pr_err("%s: gpio set cannot be de-activated %s\n",
+					__func__, "ear_switch");
+			return ret;
+		}
+	}
+	return 0;
+}
+
 /* Validate whether US EU switch is present or not */
 int is_us_eu_switch_gpio_support(struct platform_device *pdev,
 		struct msm8916_asoc_mach_data *pdata)
@@ -327,6 +554,162 @@ int is_us_eu_switch_gpio_support(struct platform_device *pdev,
 		mbhc_cfg.swap_gnd_mic = msm8952_swap_gnd_mic;
 	}
 	return 0;
+}
+
+/*MM-ChrisYKLu-MS3BringUp-00+{ */
+static int msm8952_ti_get_spk(struct snd_kcontrol *kcontrol,
+		       struct snd_ctl_elem_value *ucontrol)
+{
+	pr_debug("%s vdd_spkr_gpio %d\n", __func__,vdd_spkr_gpio);
+
+	if (gpio_is_valid(vdd_spkr_gpio))
+	{
+		pr_debug("%s vdd_spkr_gpio %d=%d\n", __func__,vdd_spkr_gpio, gpio_get_value(vdd_spkr_gpio));
+		ucontrol->value.integer.value[0] = gpio_get_value(vdd_spkr_gpio);
+	}
+	return 0;
+}
+
+static int msm8952_ti_set_spk(struct snd_kcontrol *kcontrol,
+		       struct snd_ctl_elem_value *ucontrol)
+{
+	pr_err("%s vdd_spkr_gpio %d\n", __func__,vdd_spkr_gpio);
+
+	if (ucontrol->value.integer.value[0] > 0) {
+		if (gpio_is_valid(vdd_spkr_gpio)) {
+			gpio_direction_output(vdd_spkr_gpio, 1);
+			pr_err( "%s: Enabled speaker\n", __func__);
+		}
+	} else {
+		if (gpio_is_valid(vdd_spkr_gpio)) {
+			gpio_direction_output(vdd_spkr_gpio, 0);
+			pr_err("%s: Disabled speaker\n", __func__);
+		}
+	}
+	return 1;
+}
+
+static int msm8952_get_sw_en(struct snd_kcontrol *kcontrol,
+		       struct snd_ctl_elem_value *ucontrol)
+{
+	if (gpio_is_valid(switch_en_gpio))
+	{
+		pr_debug("%s switch_en_gpio %d=%d\n", __func__, switch_en_gpio, gpio_get_value(switch_en_gpio));
+		ucontrol->value.integer.value[0] = gpio_get_value(switch_en_gpio);
+	}
+	return 0;
+}
+
+static int msm8952_set_sw_en(struct snd_kcontrol *kcontrol,
+		       struct snd_ctl_elem_value *ucontrol)
+{
+	pr_err("%s switch_en_gpio %d\n", __func__,switch_en_gpio);
+
+	if (ucontrol->value.integer.value[0] > 0) {
+		if (gpio_is_valid(switch_en_gpio)) {
+			gpio_direction_output(switch_en_gpio, 1);
+			pr_err( "%s: Enabled switch en\n",__func__);
+		}
+	} else {
+		if (gpio_is_valid(switch_en_gpio)) {
+			gpio_direction_output(switch_en_gpio, 0);
+			pr_err("%s: Disabled switch en\n", __func__);
+		}
+	}
+	return 1;
+}
+
+static int msm8952_get_sw_in(struct snd_kcontrol *kcontrol,
+		       struct snd_ctl_elem_value *ucontrol)
+{
+	if (gpio_is_valid(switch_in_gpio))
+	{
+		pr_debug("%s switch_in_gpio %d=%d\n", __func__, switch_in_gpio, gpio_get_value(switch_in_gpio));
+		ucontrol->value.integer.value[0] = gpio_get_value(switch_in_gpio);
+	}
+	return 0;
+}
+
+static int msm8952_set_sw_in(struct snd_kcontrol *kcontrol,
+		       struct snd_ctl_elem_value *ucontrol)
+{
+	pr_err("%s switch_in_gpio %d\n", __func__, switch_in_gpio);
+
+	if (ucontrol->value.integer.value[0] > 0) {
+		if (gpio_is_valid(switch_in_gpio)) {
+			gpio_direction_output(switch_in_gpio, 1);
+			pr_err( "%s: Enabled switch in\n",__func__);
+		}
+	} else {
+		if (gpio_is_valid(switch_in_gpio)) {
+			gpio_direction_output(switch_in_gpio, 0);
+			pr_err("%s: Disabled switch in\n",__func__);
+		}
+	}
+	return 1;
+}
+
+/*MM-ChrisYKLu-MS3BringUp-00+} */
+
+/* 20160822,  add for earprice switch*/
+static int msm8952_get_ear_sw_en(struct snd_kcontrol *kcontrol,
+		       struct snd_ctl_elem_value *ucontrol)
+{
+	if (gpio_is_valid(ear_switch_en_gpio))
+	{
+		pr_err("%s ear_switch_en_gpio %d=%d\n", __func__, ear_switch_en_gpio, gpio_get_value(ear_switch_en_gpio));
+		ucontrol->value.integer.value[0] = gpio_get_value(ear_switch_en_gpio);
+	}
+	return 0;
+}
+
+static int msm8952_set_ear_sw_en(struct snd_kcontrol *kcontrol,
+		       struct snd_ctl_elem_value *ucontrol)
+{
+	pr_err("%s ear_switch_en_gpio %d\n", __func__,ear_switch_en_gpio);
+
+	if (ucontrol->value.integer.value[0] > 0) {
+		if (gpio_is_valid(ear_switch_en_gpio)) {
+			gpio_direction_output(ear_switch_en_gpio, 1);
+			pr_err( "%s: Enabled ear_switch en\n",__func__);
+		}
+	} else {
+		if (gpio_is_valid(ear_switch_en_gpio)) {
+			gpio_direction_output(ear_switch_en_gpio, 0);
+			pr_err("%s: Disabled ear_switch en\n", __func__);
+		}
+	}
+	return 1;
+}
+
+static int msm8952_get_ear_sw_in(struct snd_kcontrol *kcontrol,
+		       struct snd_ctl_elem_value *ucontrol)
+{
+	if (gpio_is_valid(ear_switch_in_gpio))
+	{
+		pr_err("%s ear_switch_in_gpio %d=%d\n", __func__, ear_switch_in_gpio, gpio_get_value(ear_switch_in_gpio));
+		ucontrol->value.integer.value[0] = gpio_get_value(ear_switch_in_gpio);
+	}
+	return 0;
+}
+
+static int msm8952_set_ear_sw_in(struct snd_kcontrol *kcontrol,
+		       struct snd_ctl_elem_value *ucontrol)
+{
+	pr_err("%s ear_switch_in_gpio %d\n", __func__, ear_switch_in_gpio);
+
+	if (ucontrol->value.integer.value[0] > 0) {
+		if (gpio_is_valid(ear_switch_in_gpio)) {
+			gpio_direction_output(ear_switch_in_gpio, 1);
+			pr_err( "%s: Enabled ear_switch in\n",__func__);
+		}
+	} else {
+		if (gpio_is_valid(ear_switch_in_gpio)) {
+			gpio_direction_output(ear_switch_in_gpio, 0);
+			pr_err("%s: Disabled ear_switch in\n",__func__);
+		}
+	}
+	return 1;
 }
 
 static int msm_proxy_rx_ch_get(struct snd_kcontrol *kcontrol,
@@ -423,6 +806,39 @@ static int msm_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 	pr_debug("%s()\n", __func__);
 	rate->min = rate->max = 48000;
 	channels->min = channels->max = 2;
+
+	return 0;
+}
+
+/* 20160902,  add for quat channel*/
+static int msm_quat_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
+				struct snd_pcm_hw_params *params)
+{
+	struct snd_interval *rate = hw_param_interval(params,
+					SNDRV_PCM_HW_PARAM_RATE);
+
+	struct snd_interval *channels = hw_param_interval(params,
+					SNDRV_PCM_HW_PARAM_CHANNELS);
+
+	pr_debug("%s(), channel:%d\n", __func__, msm_quat_mi2s_rx_ch);
+	rate->min = rate->max = 48000;
+	channels->min = channels->max = msm_quat_mi2s_rx_ch;
+
+	return 0;
+}
+
+static int msm_quat_tx_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
+				struct snd_pcm_hw_params *params)
+{
+	struct snd_interval *rate = hw_param_interval(params,
+					SNDRV_PCM_HW_PARAM_RATE);
+
+	struct snd_interval *channels = hw_param_interval(params,
+					SNDRV_PCM_HW_PARAM_CHANNELS);
+
+	pr_debug("%s(), channel:%d\n", __func__, 1);
+	rate->min = rate->max = 48000;
+	channels->min = channels->max = 1;
 
 	return 0;
 }
@@ -580,6 +996,7 @@ static int msm_mi2s_sclk_ctl(struct snd_pcm_substream *substream, bool enable)
 	if (enable) {
 		if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
 			if (pdata->afe_clk_ver == AFE_CLK_VERSION_V1) {
+				mi2s_rx_clk_v1.clk_val2 = Q6AFE_LPASS_OSR_CLK_12_P288_MHZ;
 				mi2s_rx_clk_v1.clk_val1 =
 						get_mi2s_rx_clk_val(port_id);
 				ret = afe_set_lpass_clock(port_id,
@@ -595,6 +1012,7 @@ static int msm_mi2s_sclk_ctl(struct snd_pcm_substream *substream, bool enable)
 			}
 		} else if (substream->stream == SNDRV_PCM_STREAM_CAPTURE) {
 			if (pdata->afe_clk_ver == AFE_CLK_VERSION_V1) {
+				mi2s_tx_clk_v1.clk_val2 = Q6AFE_LPASS_OSR_CLK_12_P288_MHZ;
 				mi2s_tx_clk_v1.clk_val1 =
 						Q6AFE_LPASS_IBIT_CLK_1_P536_MHZ;
 				ret = afe_set_lpass_clock(port_id,
@@ -617,6 +1035,7 @@ static int msm_mi2s_sclk_ctl(struct snd_pcm_substream *substream, bool enable)
 	} else {
 		if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
 			if (pdata->afe_clk_ver == AFE_CLK_VERSION_V1) {
+				mi2s_rx_clk_v1.clk_val2 = Q6AFE_LPASS_OSR_CLK_DISABLE;
 				mi2s_rx_clk_v1.clk_val1 =
 						Q6AFE_LPASS_IBIT_CLK_DISABLE;
 				ret = afe_set_lpass_clock(port_id,
@@ -630,6 +1049,7 @@ static int msm_mi2s_sclk_ctl(struct snd_pcm_substream *substream, bool enable)
 			}
 		} else if (substream->stream == SNDRV_PCM_STREAM_CAPTURE) {
 			if (pdata->afe_clk_ver == AFE_CLK_VERSION_V1) {
+				mi2s_tx_clk_v1.clk_val2 = Q6AFE_LPASS_OSR_CLK_DISABLE;
 				mi2s_tx_clk_v1.clk_val1 =
 						Q6AFE_LPASS_IBIT_CLK_DISABLE;
 				ret = afe_set_lpass_clock(port_id,
@@ -968,6 +1388,24 @@ static int msm_ter_mi2s_tx_ch_put(struct snd_kcontrol *kcontrol,
 	return 1;
 }
 
+static int msm_quat_mi2s_rx_ch_get(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	pr_debug("%s: msm_quat_mi2s_rx_ch  = %d\n", __func__,
+		 msm_quat_mi2s_rx_ch);
+	ucontrol->value.integer.value[0] = msm_quat_mi2s_rx_ch - 1;
+	return 0;
+}
+
+static int msm_quat_mi2s_rx_ch_put(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	msm_quat_mi2s_rx_ch = ucontrol->value.integer.value[0] + 1;
+
+	pr_debug("%s: msm_quat_mi2s_rx_ch = %d\n", __func__, msm_quat_mi2s_rx_ch);
+	return 1;
+}
+
 static int msm_vi_feed_tx_ch_get(struct snd_kcontrol *kcontrol,
 	struct snd_ctl_elem_value *ucontrol)
 {
@@ -1002,6 +1440,16 @@ static const struct soc_enum msm_snd_enum[] = {
 				vi_feed_ch_text),
 	SOC_ENUM_SINGLE_EXT(ARRAY_SIZE(mi2s_rx_sample_rate_text),
 				mi2s_rx_sample_rate_text),
+	SOC_ENUM_SINGLE_EXT(2, spk_function),
+	SOC_ENUM_SINGLE_EXT(2, switch_en_function),
+	SOC_ENUM_SINGLE_EXT(2, switch_in_function),
+
+	/* 20160822,  add for earprice switch*/
+	SOC_ENUM_SINGLE_EXT(2, ear_switch_en_function),
+	SOC_ENUM_SINGLE_EXT(2, ear_switch_in_function),
+	/* 20160925,  add for quat channel*/
+	SOC_ENUM_SINGLE_EXT(ARRAY_SIZE(mi2s_ch_text),
+				mi2s_ch_text),
 };
 
 static const struct snd_kcontrol_new msm_snd_controls[] = {
@@ -1021,6 +1469,22 @@ static const struct snd_kcontrol_new msm_snd_controls[] = {
 			msm_vi_feed_tx_ch_get, msm_vi_feed_tx_ch_put),
 	SOC_ENUM_EXT("MI2S_RX SampleRate", msm_snd_enum[6],
 			mi2s_rx_sample_rate_get, mi2s_rx_sample_rate_put),
+	/*MM-ChrisYKLu-MS3BringUp-00+{ */
+	SOC_ENUM_EXT("TI Speaker Function", msm_snd_enum[7], msm8952_ti_get_spk,
+			msm8952_ti_set_spk),
+	SOC_ENUM_EXT("Switch EN", msm_snd_enum[8], msm8952_get_sw_en,
+			msm8952_set_sw_en),
+	SOC_ENUM_EXT("Switch IN", msm_snd_enum[9], msm8952_get_sw_in,
+			msm8952_set_sw_in),
+	/*MM-ChrisYKLu-MS3BringUp-00+} */
+	/* 20160822,  add for earprice switch*/
+	SOC_ENUM_EXT("Ear Switch EN", msm_snd_enum[10], msm8952_get_ear_sw_en,
+			msm8952_set_ear_sw_en),
+	SOC_ENUM_EXT("Ear Switch IN", msm_snd_enum[11], msm8952_get_ear_sw_in,
+			msm8952_set_ear_sw_in),
+	SOC_ENUM_EXT("QUAT_MI2S_RX Channels", msm_snd_enum[12],
+			msm_quat_mi2s_rx_ch_get, msm_quat_mi2s_rx_ch_put),
+
 };
 
 static int msm8952_mclk_event(struct snd_soc_dapm_widget *w,
@@ -1417,6 +1881,7 @@ static int msm_quat_mi2s_snd_startup(struct snd_pcm_substream *substream)
 
 	if (!q6core_is_adsp_ready()) {
 		pr_err("%s(): adsp not ready\n", __func__);
+                BUG_ON(1);
 		return -EINVAL;
 	}
 
@@ -1545,7 +2010,7 @@ static void *def_msm8952_wcd_mbhc_cal(void)
 		return NULL;
 
 #define S(X, Y) ((WCD_MBHC_CAL_PLUG_TYPE_PTR(msm8952_wcd_cal)->X) = (Y))
-	S(v_hs_max, 1500);
+	S(v_hs_max, 1700);//1500/* MM-ChrisYKLu-fix HS detect-00* */
 #undef S
 #define S(X, Y) ((WCD_MBHC_CAL_BTN_DET_PTR(msm8952_wcd_cal)->X) = (Y))
 	S(num_btn, WCD_MBHC_DEF_BUTTONS);
@@ -1568,15 +2033,15 @@ static void *def_msm8952_wcd_mbhc_cal(void)
 	 * 210-290 == Button 2
 	 * 360-680 == Button 3
 	 */
-	btn_low[0] = 75;
-	btn_high[0] = 75;
-	btn_low[1] = 150;
-	btn_high[1] = 150;
-	btn_low[2] = 225;
-	btn_high[2] = 225;
-	btn_low[3] = 450;
-	btn_high[3] = 450;
-	btn_low[4] = 500;
+	btn_low[0] = 100;
+	btn_high[0] = 100;
+	btn_low[1] = 225;
+	btn_high[1] = 225;
+	btn_low[2] = 430;    //[PLE-662]:tuning the btn threshold value non volume down when plug headset
+	btn_high[2] = 500;
+	btn_low[3] = 430;    //[PLE-662]:tuning the btn threshold value non volume down when plug headset
+	btn_high[3] = 500;
+	btn_low[4] = 430;    //[PLE-662]:tuning the btn threshold value non volume down when plug headset
 	btn_high[4] = 500;
 
 	return msm8952_wcd_cal;
@@ -1618,6 +2083,12 @@ static int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
 
 	msm8x16_wcd_spk_ext_pa_cb(enable_spk_ext_pa, codec);
 	msm8x16_wcd_hph_comp_cb(config_hph_compander_gpio, codec);
+	/* MM-ChrisYKLu-headphoneSwitch-00+{ */
+	msm8x16_wcd_headphone_switch(enable_headphone_switch, codec);
+	/* MM-ChrisYKLu-headphoneSwitch-00+} */
+
+	/* 20160822,  add for earprice switch*/
+	msm8x16_wcd_ear_switch(enable_ear_switch, codec);
 
 	mbhc_cfg.calibration = def_msm8952_wcd_mbhc_cal();
 	if (mbhc_cfg.calibration) {
@@ -1985,6 +2456,7 @@ static struct snd_soc_dai_link msm8952_dai[] = {
 		.cpu_dai_name = "LSM1",
 		.platform_name = "msm-lsm-client",
 		.dynamic = 1,
+		.dpcm_playback = 1,
 		.dpcm_capture = 1,
 		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
 			SND_SOC_DPCM_TRIGGER_POST },
@@ -2333,36 +2805,6 @@ static struct snd_soc_dai_link msm8952_dai[] = {
 		.ignore_pmdown_time = 1,
 		.be_id = MSM_FRONTEND_DAI_MULTIMEDIA19,
 	},
-	{/* hw:x,41 */
-		.name = "MSM8X16 Compress13",
-		.stream_name = "Compress13",
-		.cpu_dai_name	= "MultiMedia28",
-		.platform_name  = "msm-compress-dsp",
-		.dynamic = 1,
-		.dpcm_capture = 1,
-		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
-			 SND_SOC_DPCM_TRIGGER_POST},
-		.codec_dai_name = "snd-soc-dummy-dai",
-		.codec_name = "snd-soc-dummy",
-		.ignore_suspend = 1,
-		.ignore_pmdown_time = 1,
-		.be_id = MSM_FRONTEND_DAI_MULTIMEDIA28,
-	},
-	{/* hw:x,42 */
-		.name = "MSM8X16 Compress14",
-		.stream_name = "Compress14",
-		.cpu_dai_name	= "MultiMedia29",
-		.platform_name  = "msm-compress-dsp",
-		.dynamic = 1,
-		.dpcm_capture = 1,
-		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
-			 SND_SOC_DPCM_TRIGGER_POST},
-		.codec_dai_name = "snd-soc-dummy-dai",
-		.codec_name = "snd-soc-dummy",
-		.ignore_suspend = 1,
-		.ignore_pmdown_time = 1,
-		.be_id = MSM_FRONTEND_DAI_MULTIMEDIA29,
-	},
 	/* Backend I2S DAI Links */
 	{
 		.name = LPASS_BE_PRI_MI2S_RX,
@@ -2421,7 +2863,7 @@ static struct snd_soc_dai_link msm8952_dai[] = {
 		.no_pcm = 1,
 		.dpcm_playback = 1,
 		.be_id = MSM_BACKEND_DAI_QUATERNARY_MI2S_RX,
-		.be_hw_params_fixup = msm_mi2s_rx_be_hw_params_fixup,
+		.be_hw_params_fixup = msm_quat_be_hw_params_fixup,
 		.ops = &msm8952_quat_mi2s_be_ops,
 		.ignore_pmdown_time = 1, /* dai link has playback support */
 		.ignore_suspend = 1,
@@ -2436,7 +2878,7 @@ static struct snd_soc_dai_link msm8952_dai[] = {
 		.no_pcm = 1,
 		.dpcm_capture = 1,
 		.be_id = MSM_BACKEND_DAI_QUATERNARY_MI2S_TX,
-		.be_hw_params_fixup = msm_be_hw_params_fixup,
+		.be_hw_params_fixup = msm_quat_tx_be_hw_params_fixup,
 		.ops = &msm8952_quat_mi2s_be_ops,
 		.ignore_suspend = 1,
 	},
@@ -3207,6 +3649,18 @@ parse_mclk_freq:
 	if (ret < 0)
 		pr_err("%s:  doesn't support external speaker pa\n",
 				__func__);
+	/* MM-ChrisYKLu-popnoise-00+{ */
+	ret = is_headphone_switch_gpio_support(pdev, pdata);
+	if (ret < 0)
+		pr_err("%s:  doesn't support headphone switch\n",
+				__func__);
+	/* MM-ChrisYKLu-popnoise-00+} */
+
+	/* 20160822,  add for earprice switch*/
+	ret = is_ear_switch_gpio_support(pdev, pdata);
+	if (ret < 0)
+		pr_err("%s:  doesn't support earprice switch\n",
+				__func__);
 
 	ret = of_property_read_string(pdev->dev.of_node,
 		hs_micbias_type, &type);
@@ -3289,6 +3743,8 @@ parse_mclk_freq:
 			ret);
 		goto err;
 	}
+	/* 20160413,  add for ExtSpkAmp flag*/
+	fih_ext_spk_amp_init(pdev);
 	return 0;
 err:
 	if (pdata->vaddr_gpio_mux_spkr_ctl)

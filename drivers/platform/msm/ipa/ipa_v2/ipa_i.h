@@ -65,8 +65,6 @@
 
 #define IPA_IPC_LOG_PAGES 50
 
-#define IPA_MAX_NUM_REQ_CACHE 10
-
 #define IPADBG(fmt, args...) \
 	do { \
 		pr_debug(DRV_NAME " %s:%d " fmt, __func__, __LINE__, ## args);\
@@ -990,11 +988,6 @@ struct ipacm_client_info {
 	bool uplink;
 };
 
-struct ipa_cne_evt {
-	struct ipa_wan_msg wan_msg;
-	struct ipa_msg_meta msg_meta;
-};
-
 /**
  * struct ipa_context - IPA context
  * @class: pointer to the struct class
@@ -1195,9 +1188,6 @@ struct ipa_context {
 	u32 ipa_rx_min_timeout_usec;
 	u32 ipa_rx_max_timeout_usec;
 	u32 ipa_polling_iteration;
-	struct ipa_cne_evt ipa_cne_evt_req_cache[IPA_MAX_NUM_REQ_CACHE];
-	int num_ipa_cne_evt_req;
-	struct mutex ipa_cne_evt_lock;
 };
 
 /**

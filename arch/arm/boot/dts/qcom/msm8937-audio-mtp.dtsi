@@ -13,8 +13,64 @@
 
 &int_codec {
 	status = "okay";
-	qcom,model = "msm8952-snd-card-mtp";
-	qcom,msm-hs-micbias-type = "external";
+	qcom,model = "msm8952-snd-card-ms3";
+	qcom,msm-micbias2-ext-cap;
+	qcom,msm-mbhc-hphl-swh = <1>;
+	qcom,msm-mbhc-gnd-swh = <1>;
+	qcom,msm-spk-ext-pa = <&tlmm 3 0>;
+	qcom,msm-hp-switch-en = <&tlmm 94 0>;
+	qcom,msm-hp-switch-in = <&tlmm 95 0>;
+	fih,acdb = "ms3";
+	qcom,audio-routing =
+	"RX_BIAS", "MCLK",
+	"SPK_RX_BIAS", "MCLK",
+	"INT_LDO_H", "MCLK",
+	"MIC BIAS External", "Handset Mic",
+	"MIC BIAS External2", "Headset Mic",
+	"MIC BIAS External", "Secondary Mic",
+	"AMIC1", "MIC BIAS External",
+	"AMIC2", "MIC BIAS External2",
+	"AMIC3", "MIC BIAS External";
+	qcom,msm-gpios =
+		"pri_i2s",
+		"ext_spk_gpio",
+		"hp_switch_gpio";
+	qcom,pinctrl-names =
+		"all_off",
+		"pri_i2s_act",
+		"ext_spk_gpio",
+		"ext_spk_gpio_pri_i2s_act",
+		"hp_switch_gpio_act",
+		"hp_switch_gpio_pri_i2s_act",
+		"hp_switch_gpio_ext_spk_gpio",
+		"hp_switch_gpio_ext_spk_gpio_pri_i2s_act";
+	pinctrl-names =
+		"all_off",
+		"pri_i2s_act",
+		"ext_spk_gpio",
+		"ext_spk_gpio_pri_i2s_act",
+		"hp_switch_gpio_act",
+		"hp_switch_gpio_pri_i2s_act",
+		"hp_switch_gpio_ext_spk_gpio",
+		"hp_switch_gpio_ext_spk_gpio_pri_i2s_act";
+	pinctrl-0 = <&cdc_pdm_lines_sus
+			&cdc_pdm_lines_2_sus &ext_spk_fih_sus &hp_sw_fih_sus>;
+	pinctrl-1 = <&cdc_pdm_lines_act
+			&cdc_pdm_lines_2_act &ext_spk_fih_sus &hp_sw_fih_sus>;
+	pinctrl-2 = <&cdc_pdm_lines_sus
+			&cdc_pdm_lines_2_sus &ext_spk_fih_act &hp_sw_fih_sus>;
+	pinctrl-3 = <&cdc_pdm_lines_act
+			&cdc_pdm_lines_2_act &ext_spk_fih_act &hp_sw_fih_sus>;
+	pinctrl-4 = <&cdc_pdm_lines_sus
+			&cdc_pdm_lines_2_sus &ext_spk_fih_sus &hp_sw_fih_act>;
+	pinctrl-5 = <&cdc_pdm_lines_act
+			&cdc_pdm_lines_2_act &ext_spk_fih_sus &hp_sw_fih_act>;
+	pinctrl-6 = <&cdc_pdm_lines_sus
+			&cdc_pdm_lines_2_sus &ext_spk_fih_act &hp_sw_fih_act>;
+	pinctrl-7 = <&cdc_pdm_lines_act
+			&cdc_pdm_lines_2_act &ext_spk_fih_act &hp_sw_fih_act>;
+
+	/delete-property/ qcom,cdc-us-euro-gpios;
 };
 
 &pm8937_cajon_dig {
@@ -25,10 +81,85 @@
 	status = "okay";
 };
 
+&wsa881x_i2c_e {
+	status = "disabled";
+};
+
+&wsa881x_i2c_44 {
+	status = "disabled";
+};
+
 &wsa881x_i2c_f {
-	status = "okay";
+	status = "disabled";
 };
 
 &wsa881x_i2c_45 {
-	status = "okay";
+	status = "disabled";
+};
+
+&soc {
+	fih_info_management {
+		acdbdir="MS3";
+	};
+};
+
+&soc {
+	tlmm: pinctrl@1000000 {
+		ext_spk_fih {
+			ext_spk_fih_act: lines_on {
+				mux {
+					pins = "gpio3";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio3";
+					drive-strength = <8>;
+					output-high;
+					bias-pull-down;
+				};
+			};
+
+			ext_spk_fih_sus: lines_off {
+				mux {
+					pins = "gpio3";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio3";
+					drive-strength = <2>;
+					bias-pull-down;
+				};
+			};
+		};
+		hp_sw_fih {
+			hp_sw_fih_act: lines_on {
+				mux {
+					pins = "gpio94", "gpio95";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio94", "gpio95";
+					drive-strength = <8>;
+					output-high;
+					bias-pull-down;
+				};
+			};
+
+			hp_sw_fih_sus: lines_off {
+				mux {
+					pins = "gpio94", "gpio95";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio94", "gpio95";
+					drive-strength = <2>;
+					bias-pull-down;
+				};
+			};
+		};
+};
 };

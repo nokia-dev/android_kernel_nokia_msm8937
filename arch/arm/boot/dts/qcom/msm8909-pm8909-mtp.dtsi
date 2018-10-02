@@ -116,7 +116,6 @@
 	qcom,cdc-vdd-spkdrv-current = <20000>;
 	qcom,cdc-on-demand-supplies = "cdc-vdd-mic-bias",
 				      "cdc-vdd-spkdrv";
-	qcom,subsys-name = "modem";
 };
 
 &wcnss {

@@ -1,0 +1,51 @@
+/*
+ * Copyright (c) 2016, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+#include "msm8937-pmi8950-fih-D1-EVB.dtsi"
+#include "msm8937-fih-D1-v1.dtsi"
+
+&soc {
+};
+
+/{
+	/delete-node/ qcom,battery-data;
+	nd1_batterydata: qcom,battery-data {
+		qcom,batt-id-range-pct = <30>;
+		#include "components/power/batterydata-nd1c_2900mAh_Coslight_39.dtsi"
+		#include "components/power/batterydata-nd1c_2900mAh_SDI_68.dtsi"
+		#include "components/power/batterydata-nd1c_2900mAh_SDI_100.dtsi"
+		#include "components/power/batterydata-nd1c_2900mAh_Coslight_200.dtsi"
+	};
+};
+
+&pmi8950_fg {
+	qcom,battery-data = <&nd1_batterydata>;
+	fih,high-low-comp-set = <1>;
+};
+
+&pmi8950_charger {
+	qcom,battery-data = <&nd1_batterydata>;
+	qcom,resume-soc = <95>;
+	qcom,fastchg-current-comp = <1200>;
+	qcom,float-voltage-comp = <16>; /* need change to 16 if float-voltage change to 4.4 */
+	fih,show-poff-temp = <1>;
+  fih,shutdown_low_temp = <20>;	
+  fih,high-low-comp-set = <1>;
+};
+
+&usb_otg {
+	//Fihtdc@Alan, adjust usb init seq. for eye diagram
+	//DC voltage-level 20%, 3x pre-emphasis current, +20% rise/fall time tuning
+//	qcom,hsusb-otg-phy-init-seq =
+//		<0x73 0x80 0x3D 0x81 0x33 0x82 0xffffffff>;
+};

@@ -1,0 +1,9 @@
+#
+# Configuration for GOODIX GFX18M
+#
+
+config GOODIX_GFX18M
+	bool "GOODIX GFX18M Driver" 
+	default n
+	---help---
+	  This is a GOODIX GFX18M chipset Driver.

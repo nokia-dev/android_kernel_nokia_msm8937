@@ -102,6 +102,7 @@ struct snd_card {
 	char mixername[80];		/* mixer name */
 	char components[128];		/* card components delimited with
 								space */
+	char acdbdir[32];		/* acdbdir name of this soundcard */
 	struct module *module;		/* top-level module */
 
 	void *private_data;		/* private data for soundcard */

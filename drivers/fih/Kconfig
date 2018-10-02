@@ -1,0 +1,468 @@
+menuconfig FIH_CONFIG_GROUP
+    bool "FIH Configurations Group"
+    default n
+    help
+        Turn on this group to enable FIH's configurations menu
+
+if FIH_CONFIG_GROUP
+    comment "FIH Project Flags for FIH_CONFIG_GROUP"
+
+    choice
+        prompt "Select a platform name"
+        default FIH_8937_PROJS
+
+        config FIH_8937_PROJS
+            bool "01 FIH_8937_PROJS"
+            help
+                Enable the support for FIH_8937_PROJS flag
+
+    endchoice
+
+    menu "Select a project name"
+        depends on FIH_8937_PROJS
+
+        menuconfig FIH_PROJECT_D1C
+
+            bool "01 FIH_PROJECT_D1C"
+            default n
+            help
+                Enable the support for FIH_PROJECT_D1C flag
+    endmenu
+
+    # --- FIH_8937_PROJS{-------------------------------------------------- START
+    # ***********************************************************
+    # Project configurations for FIH_8937_PROJS
+
+    # ***********************************************************
+    menu "Configurations for FIH_8937_PROJS"
+        depends on FIH_8937_PROJS
+
+
+        menuconfig FIH_SENSORS
+            bool "FIH sensors"
+            default n
+            help
+                Turn on this group to enable FIH's sensor configurations menu
+
+        if FIH_SENSORS
+
+            config INPUT_SENSORS
+                bool "enable yamaha sensors driver release"
+                depends on FIH_CONFIG_GROUP
+                default n
+                help
+                    enable yamaha sensors driver release
+
+        endif
+
+	menuconfig FIH_HEADSET
+            bool "FIH headset"
+            default n
+            help
+                Turn on this group to enable FIH's headset configurations menu
+
+        if FIH_HEADSET
+
+        endif
+
+        menuconfig FIH_WIFI
+            bool "FIH wifi"
+            default n
+            help
+                Turn on this group to enable FIH's wifi configurations menu
+
+        if FIH_WIFI
+
+            config BROADCOM_BCM43341
+                bool "Broadcom BCM4330 for BT/FM solution"
+                depends on FIH_CONFIG_GROUP
+                default n
+                help
+                    Broadcom BCM4330 Driver implement by FIH.
+
+        endif
+
+        menuconfig FIH_TOUCHSCREEN
+            bool "FIH touch screen"
+            default n
+            help
+                Turn on this group to enable FIH's touch screen configurations menu
+
+        if FIH_TOUCHSCREEN
+
+             config TOUCHSCREEN_ATMEL_MAXTOUCH_224E
+             tristate "Atmel maXTouch based touchscreens"
+             depends on I2C
+             default n
+             help
+                 Say Y here if you have an Atmel Maxtouch based touchscreen.
+                 If unsure, say N.
+                 To compile this driver as a module, choose M here: the
+                 module will be called maXTouch.
+
+	     config TOUCHSCREEN_ATMEL_MAXTOUCH_336S
+             tristate "Atmel maXTouch based touchscreens"
+             depends on I2C
+             default n
+             help
+                 Say Y here if you have an Atmel Maxtouch based touchscreen.
+                 If unsure, say N.
+                 To compile this driver as a module, choose M here: the
+                 module will be called maXTouch.
+
+
+        endif
+
+        menuconfig FIH_BT
+            bool "FIH BT"
+            default n
+            help
+                Turn on this group to enable FIH's BT configurations menu
+
+        if FIH_BT
+
+        endif
+
+        menuconfig FIH_HDMI
+            bool "FIH hdmi"
+            default n
+            help
+                Turn on this group to enable FIH's hdmi configurations menu
+
+        if FIH_HDMI
+
+        endif
+
+		menuconfig FIH_MHL
+            bool "FIH mhl"
+            default n
+            help
+                Turn on this group to enable FIH's mhl configurations menu
+
+        if FIH_MHL
+
+        endif
+
+        menuconfig FIH_KEYPAD
+            bool "FIH keypad"
+            default n
+            help
+                Turn on this group to enable FIH's keypad configurations menu
+
+        if FIH_KEYPAD
+
+        config FIH_KEYBOARD_GPIO
+                bool "use FIH gpio keyboard"
+                default n
+                help
+                    use FIH gpio keyboard
+        endif
+
+        menuconfig NFC_DEVICES
+            bool "Near Field Communication (NFC) devices"
+            default n
+            ---help---
+                You'll have to say Y if your computer contains an NFC device that
+                you want to use under Linux.
+                You can say N here if you don't have any Near Field Communication
+                devices connected to your computer.
+
+        if NFC_DEVICES
+
+            config FIH_NFC
+            tristate "FIH PN544 NFC driver"
+            depends on I2C
+            select CRC_CCITT
+            default n
+            ---help---
+              Say yes if you want PN544 Near Field Communication driver.
+              This is for i2c connected version. If unsure, say N here.
+              To compile this driver as a module, choose m here. The module will
+              be called pn544.
+
+
+        endif # NFC_DEVICES
+
+        menuconfig FIH_LED
+            bool "FIH LED"
+            default n
+            help
+                Turn on this group to enable FIH's LED configurations menu
+
+        if FIH_LED
+
+        endif
+
+        menuconfig FIH_CAM
+            bool "FIH Camera"
+            default n
+            help
+                Turn on this group to enable FIH's camera configurations menu
+
+        if FIH_CAM
+            config MT9E013
+	            bool "Sensor mt9e013"
+	            default n
+	            ---help---
+	            Aptina 8Mp CMOS Digital Image Sensor
+
+            config MT9E013_ACT
+	            bool "Sensor mt9e013 ACT"
+	            default n
+	            ---help---
+	            Aptina 8Mp CMOS Digital Image Sensor with AF
+
+            config MT9P111
+	            bool "Sensor mt9p111"
+	            default n
+	            ---help---
+	            Aptina 8Mp CMOS Digital Image Sensor
+
+            config MT9P111_FLASH
+	            bool "Sensor mt9p111 flash"
+	            default n
+	            ---help---
+	            Aptina 5Mp CMOS Digital Image Sensor with Flash
+
+            config MT9V115
+	            bool "Sensor mt9v115 (VGA YUV)"
+	            default n
+	            ---help---
+	            Aptina VGA 0.3M SOC Sensor
+
+	    config MT9M114
+	            bool "Sensor mt9m114 (VGA YUV)"
+	            default n
+	            ---help---
+	            Aptina VGA 1.26M SOC Sensor
+
+           config FIH_OV5640AF
+                    bool "Sensor OV5640AF (YUV 5M)"
+                   depends on MSM_CAMERA && ARCH_MSM7X27A && !MSM_CAMERA_V4L2
+                   default n
+                  ---help---
+                  Omni Vision 5M YUV Sensor.
+
+           config FIH_OV7692
+	        bool "Sensor OV7692 (VGA YUV 0.3M)"
+	          depends on MSM_CAMERA && (ARCH_MSM8X60 || ARCH_MSM7X27A) && !MSM_CAMERA_V4L2
+	          default n
+	        ---help---
+	           Omni Vision VGA YUV Sensor.
+
+	   config IMX111
+		bool "Sensor IMX111 (Sony 8MP)"
+		default n
+		---help---
+		Sony 2D 8M with Autofocus
+
+	   config MSM_CAMERA_FLASH_LM3642
+		bool "Qualcomm MSM camera lm3642 flash support"
+		depends on MSM_CAMERA
+		default n
+		---help---
+		  Enable support for LED flash for msm camera.
+		  It is a samtech charge pump flash driver and it
+		  supports spotlight and flash light modes with
+		  differrent current levels.
+
+	config IMX111_ACT
+		bool "Sensor IMX111 (Sony 8MP) ACT"
+		default n
+		---help---
+			Sony 2D 8M with Autofocus ACT
+
+        endif
+
+        menuconfig FIH_DEBUG
+            bool "FIH DEBUG"
+            default n
+            help
+                Turn on this group to enable FIH's DEBUG configurations menu
+
+        if FIH_DEBUG
+
+            config FIH_LAST_ALOG
+                bool "FIH LAST ALOG"
+                depends on FIH_CONFIG_GROUP
+                default n
+                help
+                    Enable/Disable Last Alog
+
+            config FIH_SUSPEND_RESUME_LOG
+                bool "FIH LOG about SUSPEND/RESUME"
+                depends on FIH_CONFIG_GROUP
+                default n
+                help
+                    Enable suspend and resume log support
+
+            config FIH_FLOG
+                bool "FIH Flog"
+                depends on FIH_CONFIG_GROUP
+                default n
+                help
+                    Enable FTM log mechanism
+
+        endif
+
+		menuconfig FIH_MLOG
+                bool "FIH Mlog"
+                default n
+                help
+                    Enable/Disable MLOG
+		if FIH_MLOG
+
+        endif
+
+        menuconfig FIH_USB
+            bool "FIH USB"
+            default n
+            help
+                Turn on this group to enable FIH's USB configurations menu
+
+        if FIH_USB
+
+            config FIH_PID_SWITCH
+                bool "FIH_PID_SWITCH"
+                depends on FIH_USB
+                default n
+                help
+                    Enable/Disable PID Switch Function
+            config FIH_USB_PORTING
+            		bool "FIH_USB_PORTING"
+            		depends on FIH_USB
+            		default n
+            		help
+            		Enable/Disable  8960 USB Driver Function
+        endif
+
+	config FIH_BAT_THERM
+            bool "FIH battery thermal"
+            default n
+            help
+	    	Enable FIH's battery thermal
+
+	config FIH_POWER_IF
+            bool "FIH power interface"
+            default n
+            help
+	    	Enable FIH's power interface
+
+        menuconfig FIH_BATTERY
+            bool "FIH battery"
+            default n
+            help
+                Turn on this group to enable FIH's battery configurations menu
+
+        menuconfig FIH_VIBRATOR
+            bool "FIH vibrator"
+            default n
+            help
+                Turn on this group to enable FIH's vibrator configurations menu
+
+        menuconfig FIH_UART
+            bool "FIH UART"
+            default n
+            help
+                Turn on this group to enable FIH's UART configurations menu
+
+        menuconfig FIH_SDCC
+            bool "FIH SDCC"
+            default n
+            help
+                Turn on this group to enable FIH's SDCC configurations menu
+
+        menuconfig FIH_FM_LNA_POWER
+            bool "FIH FM LNA and Power"
+            default n
+            help
+                Turn on this group to enable FIH's FM LNA and Power control
+
+        config FIH_FTM
+            bool "FIH_FTM"
+            default n
+            help
+                Enable/Disable the build flag FIH_FTM.
+
+        config W1_SLAVE_BQ2024
+            bool "1.5kb serial EPROM with sdq interface."
+            depends on W1_MASTER_GPIO
+            default n
+            help
+                Enable TI BQ2024 1.5kb Serial EPROM driver.
+
+        config FIH_FXX
+            bool "FIH_FXX"
+            default n
+            help
+                Enable FIH setting.
+
+        config FIH_BUILDTYPE_DEBUG
+            bool "Enable Build Type for Debug (Turn off this flag if you need a Release type)"
+            default n
+
+        config FIH_REMOVE_SERIAL_DYNAMICALLY
+            bool "FIH Remove msm_serial dynamically"
+            depends on FIH_BUILDTYPE_DEBUG
+            default n
+            help
+                Register console and serial depending on key
+
+        config FIH_MODEM_REMOVE_UART2_CLK
+            bool "FIH modem already removed UART2 clk voter"
+            depends on FIH_REMOVE_SERIAL_DYNAMICALLY
+            default n
+            help
+                Don't control console_suspend_enabled variable if UART2 clock already removedat mode side.
+
+        config FIH_HWCONFIG
+            bool "FIH_HWCONFIG"
+            default n
+            help
+                Enable/Disable FIH hwconfig.
+        
+        config FIH_DEVICE_TREE_DEBUG
+        	bool "FIH Device Tree Debug"
+        	default n
+        
+        config FIH_HALL_SENSOR
+        	bool "FIH Hall sensor"
+        	default n
+        config AWINIC_AW87319
+                bool "AWNINC AW87319"
+                default n
+
+
+    endmenu
+    # --- FIH_8937_PROJS}-------------------------------------------------- END
+
+endif
+
+#Kernel Module sign key from FIH
+config MODULE_SIG_FIH
+	bool "Use static module sign key"
+	depends on MODULE_SIG
+	help
+	  Use the static module sign key
+	  in kernel/scripts/fih/
+
+choice
+	prompt "Define fih sig key path"
+	depends on MODULE_SIG_FIH
+	default MODULE_SIG_KEY_IN_NORMAL
+	help
+	  fih sig key path
+
+config MODULE_SIG_KEY_IN_NORMAL
+	bool "Key for normal"
+
+config MODULE_SIG_KEY_IN_FTM
+	bool "Key for normal"
+
+endchoice
+
+config MODULE_SIG_FIH_KEY_PATH
+	string
+	depends on MODULE_SIG_FIH
+	default "../../../../../../kernel/scripts/fih" if MODULE_SIG_KEY_IN_NORMAL
+	default "../../../mach/QCOM8937/kernel/linux/scripts/fih" if MODULE_SIG_KEY_IN_FTM

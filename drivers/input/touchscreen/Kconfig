@@ -13,7 +13,8 @@ if INPUT_TOUCHSCREEN
 
 source "drivers/input/touchscreen/synaptics_dsx/Kconfig"
 source "drivers/input/touchscreen/synaptics_dsx_2.6/Kconfig"
-
+source "drivers/input/touchscreen/ilitek/Kconfig"
+source "drivers/input/touchscreen/novatek/Kconfig"
 config OF_TOUCHSCREEN
 	def_tristate INPUT
 	depends on INPUT && OF
@@ -104,6 +105,17 @@ config TOUCHSCREEN_AR1021_I2C
 
 	  To compile this driver as a module, choose M here: the
 	  module will be called ar1021_i2c.
+
+config TOUCHSCREEN_SMARTAMP_I2C_DRIVER
+	tristate "Smart AMP I2C virtual driver"
+	depends on I2C
+	default y
+	help
+	  Say Y here if you need to register I2C device.
+
+	  If unsure, say N.
+
+	  To compile this driver as a module.
 
 config TOUCHSCREEN_ATMEL_MXT
 	tristate "Atmel mXT I2C Touchscreen"

@@ -266,6 +266,7 @@ enum power_supply_property {
 	POWER_SUPPLY_PROP_MANUFACTURER,
 	POWER_SUPPLY_PROP_SERIAL_NUMBER,
 	POWER_SUPPLY_PROP_BATTERY_TYPE,
+	POWER_SUPPLY_PROP_FLOATED_CHARGER, //   add for re-run apsd in slow-insertion issue
 };
 
 enum power_supply_type {

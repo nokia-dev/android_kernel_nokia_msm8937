@@ -418,7 +418,6 @@ static void f_midi_unbind(struct usb_configuration *c, struct usb_function *f)
 	midi->card = NULL;
 	if (card)
 		snd_card_free_when_closed(card);
-
 	kfree(midi->id);
 	midi->id = NULL;
 

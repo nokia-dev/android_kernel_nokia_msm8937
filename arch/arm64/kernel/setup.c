@@ -63,6 +63,10 @@
 #include <asm/efi.h>
 #include <asm/system_misc.h>
 
+#ifdef CONFIG_FIH_HWCONFIG
+#include <fih/hwid.h>
+#endif
+
 unsigned int boot_reason;
 EXPORT_SYMBOL(boot_reason);
 
@@ -398,6 +402,10 @@ static int __init topology_init(void)
 		cpu->hotpluggable = 1;
 		register_cpu(cpu, i);
 	}
+
+	#ifdef CONFIG_FIH_HWCONFIG
+	fih_hwid_setup();
+	#endif
 
 	return 0;
 }

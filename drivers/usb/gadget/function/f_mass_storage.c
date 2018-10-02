@@ -601,6 +601,50 @@ static int fsg_setup(struct usb_function *f,
 
 /*-------------------------------------------------------------------------*/
 
+#define CONFIG_FIH_FEATURE
+#ifdef CONFIG_FIH_FEATURE
+#include <linux/reboot.h>
+#include <fih/fih_usb.h>
+
+static int (*fih_tool_func_ptr)(int, void*);
+
+int fih_tool_register_func(int (*callback)(int, void*))
+{
+	fih_tool_func_ptr = callback;
+	return 0;
+}
+EXPORT_SYMBOL(fih_tool_register_func);
+
+void fih_tool_unregister_func(void (*callback)(int, void*))
+{
+	fih_tool_func_ptr = NULL;
+}
+EXPORT_SYMBOL(fih_tool_unregister_func);
+
+static int fih_tool_func(int command, void *data)
+{
+	if (fih_tool_func_ptr) {
+		if(command >= CHECK_COMMAND && command <= EXE_COMMAND) {
+			struct fsg_common *input_data;
+			struct fih_usb_data input;
+			input_data = (struct fsg_common *)data;
+			input.cmnd = input_data->cmnd;
+			input.bh_buf = input_data->next_buffhd_to_fill->buf;
+			input.data_size_from_cmnd = &input_data->data_size_from_cmnd;
+			return (*fih_tool_func_ptr) (command, &input);
+		} else if(command == CHECK_STATUS) {
+			int *input;
+			input = (int *)data;
+			return (*fih_tool_func_ptr) (command, input);
+		} else {
+			return 0;
+		}
+	} else {
+		return 0;
+	}
+}
+#endif
+
 /* All the following routines run in process context */
 
 /* Use this for bulk or interrupt transfers, not ep0 */
@@ -1332,6 +1376,10 @@ static int do_read_toc(struct fsg_common *common, struct fsg_buffhd *bh)
 	int		msf = common->cmnd[1] & 0x02;
 	int		start_track = common->cmnd[6];
 	u8		*buf = (u8 *)bh->buf;
+#ifdef READ_TOC_SUPPORT_MAC_OS
+	u8	 	format;
+	int	 	ret;
+#endif
 
 	if ((common->cmnd[1] & ~0x02) != 0 ||	/* Mask away MSF */
 			start_track > 1) {
@@ -1339,6 +1387,7 @@ static int do_read_toc(struct fsg_common *common, struct fsg_buffhd *bh)
 		return -EINVAL;
 	}
 
+#ifndef READ_TOC_SUPPORT_MAC_OS
 	memset(buf, 0, 20);
 	buf[1] = (20-2);		/* TOC data length */
 	buf[2] = 1;			/* First track number */
@@ -1351,6 +1400,27 @@ static int do_read_toc(struct fsg_common *common, struct fsg_buffhd *bh)
 	buf[14] = 0xAA;			/* Lead-out track number */
 	store_cdrom_address(&buf[16], msf, curlun->num_sectors);
 	return 20;
+#else
+	/*
+	 * Check if CDB is old style SFF-8020i
+	 * i.e. format is in 2 MSBs of byte 9
+	 * Mac OS-X host sends us this.
+	 *
+	 *			cmnd[9]	cmnd[2]
+	 *	Win		0x00	0x0
+	 *	Mac		0x80	0x0
+	 */
+	format = (common->cmnd[9] >> 6) & 0x3;
+	if (format == 0)
+		format = common->cmnd[2] & 0xf;	/* new style MMC-2 */
+
+	ret = fsg_get_toc(curlun, msf, format, buf);
+	if (ret < 0) {
+		curlun->sense_data = SS_INVALID_FIELD_IN_CDB;
+		return -EINVAL;
+	}
+	return ret;
+#endif
 }
 
 static int do_mode_sense(struct fsg_common *common, struct fsg_buffhd *bh)
@@ -1917,8 +1987,15 @@ static int check_command(struct fsg_common *common, int cmnd_size,
 		 */
 		if (common->cmnd[0] != INQUIRY &&
 		    common->cmnd[0] != REQUEST_SENSE) {
+#ifdef CONFIG_FIH_FEATURE
+			if (!fih_tool_func(CHECK_COMMAND, common)) {
+				DBG(common, "unsupported LUN %u\n", common->lun);
+			return -EINVAL;
+			}
+#else
 			DBG(common, "unsupported LUN %u\n", common->lun);
 			return -EINVAL;
+#endif
 		}
 	}
 
@@ -1929,11 +2006,39 @@ static int check_command(struct fsg_common *common, int cmnd_size,
 	if (curlun && curlun->unit_attention_data != SS_NO_SENSE &&
 	    common->cmnd[0] != INQUIRY &&
 	    common->cmnd[0] != REQUEST_SENSE) {
+#ifdef CONFIG_FIH_FEATURE
+		if (!fih_tool_func(CHECK_COMMAND, common)) {
+			curlun->sense_data = curlun->unit_attention_data;
+			curlun->unit_attention_data = SS_NO_SENSE;
+			return -EINVAL;
+		}
+#else
 		curlun->sense_data = curlun->unit_attention_data;
 		curlun->unit_attention_data = SS_NO_SENSE;
 		return -EINVAL;
+#endif
 	}
 
+#ifdef CONFIG_FIH_FEATURE
+	if (!fih_tool_func(CHECK_COMMAND, common)) {
+		/* Check that only command bytes listed in the mask are non-zero */
+		common->cmnd[1] &= 0x1f;			/* Mask away the LUN */
+		for (i = 1; i < cmnd_size; ++i) {
+			if (common->cmnd[i] && !(mask & (1 << i))) {
+				if (curlun)
+					curlun->sense_data = SS_INVALID_FIELD_IN_CDB;
+				return -EINVAL;
+			}
+		}
+
+		/* If the medium isn't mounted and the command needs to access
+		 * it, return an error. */
+		if (curlun && !fsg_lun_is_open(curlun) && needs_medium) {
+			curlun->sense_data = SS_MEDIUM_NOT_PRESENT;
+			return -EINVAL;
+		}
+	}
+#else
 	/* Check that only command bytes listed in the mask are non-zero */
 	common->cmnd[1] &= 0x1f;			/* Mask away the LUN */
 	for (i = 1; i < cmnd_size; ++i) {
@@ -1950,6 +2055,7 @@ static int check_command(struct fsg_common *common, int cmnd_size,
 		curlun->sense_data = SS_MEDIUM_NOT_PRESENT;
 		return -EINVAL;
 	}
+#endif
 
 	return 0;
 }
@@ -2111,7 +2217,11 @@ static int do_scsi_command(struct fsg_common *common)
 		common->data_size_from_cmnd =
 			get_unaligned_be16(&common->cmnd[7]);
 		reply = check_command(common, 10, DATA_DIR_TO_HOST,
+#ifdef READ_TOC_SUPPORT_MAC_OS
+				      (0xf<<6) | (1<<1), 1,
+#else
 				      (7<<6) | (1<<1), 1,
+#endif
 				      "READ TOC");
 		if (reply == 0)
 			reply = do_read_toc(common, bh);
@@ -2220,6 +2330,10 @@ static int do_scsi_command(struct fsg_common *common)
 		/* Fall through */
 
 	default:
+#ifdef CONFIG_FIH_FEATURE
+	if (fih_tool_func(EXE_COMMAND_CHECK, common)) {
+		reply = fih_tool_func(EXE_COMMAND, common);
+	} else {
 unknown_cmnd:
 		common->data_size_from_cmnd = 0;
 		sprintf(unknown, "Unknown x%02x", common->cmnd[0]);
@@ -2230,6 +2344,19 @@ unknown_cmnd:
 			reply = -EINVAL;
 		}
 		break;
+	}
+#else
+unknown_cmnd:
+		common->data_size_from_cmnd = 0;
+		sprintf(unknown, "Unknown x%02x", common->cmnd[0]);
+		reply = check_command(common, common->cmnd_size,
+				      DATA_DIR_UNKNOWN, ~0, 0, unknown);
+		if (reply == 0) {
+			common->curlun->sense_data = SS_INVALID_COMMAND;
+			reply = -EINVAL;
+		}
+		break;
+#endif
 	}
 	up_read(&common->filesem);
 
@@ -2745,6 +2872,21 @@ static int fsg_main_thread(void *common_)
 		}
 		if (send_status(common))
 			continue;
+
+#ifdef CONFIG_FIH_FEATURE
+		{
+			int check_flag;
+			check_flag = CHECK_STATUS_MODE_SWITCH_REBOOT_FLAG;
+			if (fih_tool_func(CHECK_STATUS, &check_flag)) {
+				kernel_restart("ftm");
+			}
+
+			check_flag = CHECK_STATUS_REBOOT_FLAG;
+			if (fih_tool_func(CHECK_STATUS, &check_flag)) {
+				kernel_restart("");
+			}
+		}
+#endif
 
 		spin_lock_irq(&common->lock);
 		if (!exception_in_progress(common))
@@ -3820,7 +3962,6 @@ static struct usb_function_instance *fsg_alloc_inst(void)
 		goto release_luns;
 
 	pr_info(FSG_DRIVER_DESC ", version: " FSG_DRIVER_VERSION "\n");
-
 	memset(&config, 0, sizeof(config));
 	config.removable = true;
 	rc = fsg_common_create_lun(opts->common, &config, 0, "lun.0",

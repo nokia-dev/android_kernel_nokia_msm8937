@@ -1,0 +1,20 @@
+/* Goodix FP */
+  goodix_gf318m {
+    compatible = "goodix,fingerprint";
+    input-device-name = "gf318m";
+    interrupt-parent = <&tlmm>;
+    interrupts = <48 0x0>;
+
+    vcc_spi-supply = <&fp_avdd_vreg>;
+    vdd_ana-supply = <&fp_avdd_vreg>;
+    vdd_io-supply = <&fp_avdd_vreg>;
+
+    goodix,gpio_reset = <&tlmm 89 0>;
+    goodix,gpio_irq = <&tlmm 48 0>;
+
+    goodix,key-customer-define = <1>;
+    
+    pinctrl-names = "pmx_fp_active","pmx_fp_suspend";
+    pinctrl-0 = <&fp_int_active &fp_reset_active>;
+    pinctrl-1 = <&fp_reset_suspend>;		
+  };

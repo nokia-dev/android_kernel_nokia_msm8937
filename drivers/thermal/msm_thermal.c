@@ -2751,8 +2751,11 @@ static int do_therm_reset(void)
 		}
 
 		if (temp >= msm_thermal_info.therm_reset_temp_degC)
-			msm_thermal_bite(
-			thresh[MSM_THERM_RESET].thresh_list[i].sensor_id, temp);
+			{
+				msm_thermal_bite(
+				thresh[MSM_THERM_RESET].thresh_list[i].sensor_id, temp);
+				printk("BBox::UEC;22::11\n");
+			}
 	}
 
 	return ret;

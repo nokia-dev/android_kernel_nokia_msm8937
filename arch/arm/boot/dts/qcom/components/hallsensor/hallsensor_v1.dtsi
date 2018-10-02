@@ -1,0 +1,10 @@
+hallsensor {
+        compatible = "fih,hallsensor";
+        interrupt-parent = <&tlmm>;
+        interrupts = <45 0x3>;
+        hallsensor,irq-gpio  = <&tlmm 45 0x00>;
+        vdd-supply = <&pm8937_l5>;
+        hall-open,linux,code = <0x2f0>;
+        hall-close,linux,code = <0x2f1>;
+};
+

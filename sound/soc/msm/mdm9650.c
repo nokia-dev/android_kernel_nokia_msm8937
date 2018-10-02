@@ -35,7 +35,6 @@
 #include "../codecs/wcd9335.h"
 #include "../codecs/wsa881x.h"
 #include "../codecs/tlv320aic3x.h"
-#include "msm-audio-pinctrl.h"
 
 /* Spk control */
 #define MDM_SPK_ON 1
@@ -370,11 +369,11 @@ static void mdm_mi2s_shutdown(struct snd_pcm_substream *substream)
 			pr_err("%s Clock disable failed\n", __func__);
 
 		if (pdata->prim_mi2s_mode == 1)
-			ret = msm_gpioset_suspend(CLIENT_WCD_EXT,
-						"pri_mi2s_aux_master");
+			ret = wcd_gpio_ctrl_select_sleep_state
+						(pdata->prim_master_p);
 		else
-			ret = msm_gpioset_suspend(CLIENT_WCD_EXT,
-						"pri_mi2s_aux_slave");
+			ret = wcd_gpio_ctrl_select_sleep_state
+						(pdata->prim_slave_p);
 		if (ret)
 			pr_err("%s: failed to set pri gpios to sleep: %d\n",
 					__func__, ret);
@@ -428,8 +427,8 @@ static int mdm_mi2s_startup(struct snd_pcm_substream *substream)
 		 * 0 means external clock slave mode.
 		 */
 		if (pdata->prim_mi2s_mode == 1) {
-			ret = msm_gpioset_activate(CLIENT_WCD_EXT,
-						"pri_mi2s_aux_master");
+			ret = wcd_gpio_ctrl_select_active_state
+					(pdata->prim_master_p);
 			if (ret < 0) {
 				pr_err("%s pinctrl set failed\n", __func__);
 				goto err;
@@ -472,8 +471,8 @@ static int mdm_mi2s_startup(struct snd_pcm_substream *substream)
 			 * Disable bit clk in slave mode for QC codec.
 			 * Enable only mclk.
 			 */
-			ret = msm_gpioset_activate(CLIENT_WCD_EXT,
-						"pri_mi2s_aux_slave");
+			ret = wcd_gpio_ctrl_select_active_state
+					(pdata->prim_slave_p);
 			if (ret < 0) {
 				pr_err("%s pinctrl set failed\n", __func__);
 				goto err;
@@ -534,11 +533,11 @@ static void mdm_sec_mi2s_shutdown(struct snd_pcm_substream *substream)
 			pr_err("%s Clock disable failed\n", __func__);
 
 		if (pdata->sec_mi2s_mode == 1)
-			ret = msm_gpioset_suspend(CLIENT_WCD_EXT,
-						"sec_mi2s_aux_master");
+			ret = wcd_gpio_ctrl_select_sleep_state
+					(pdata->sec_master_p);
 		else
-			ret = msm_gpioset_suspend(CLIENT_WCD_EXT,
-						"sec_mi2s_aux_slave");
+			ret = wcd_gpio_ctrl_select_sleep_state
+					(pdata->sec_slave_p);
 		if (ret)
 			pr_err("%s: failed to set sec gpios to sleep: %d\n",
 				__func__, ret);
@@ -592,8 +591,8 @@ static int mdm_sec_mi2s_startup(struct snd_pcm_substream *substream)
 		 * 0 means external clock slave mode.
 		 */
 		if (pdata->sec_mi2s_mode == 1) {
-			ret = msm_gpioset_activate(CLIENT_WCD_EXT,
-						"sec_mi2s_aux_master");
+			ret = wcd_gpio_ctrl_select_active_state
+					(pdata->sec_master_p);
 			if (ret < 0) {
 				pr_err("%s pinctrl set failed\n", __func__);
 				goto err;
@@ -620,8 +619,8 @@ static int mdm_sec_mi2s_startup(struct snd_pcm_substream *substream)
 			 * Enable mclk here, if needed for external codecs.
 			 * Optional. Refer primary mi2s slave interface.
 			 */
-			ret = msm_gpioset_activate(CLIENT_WCD_EXT,
-						"sec_mi2s_aux_slave");
+			ret = wcd_gpio_ctrl_select_active_state
+					(pdata->sec_slave_p);
 			if (ret < 0) {
 				pr_err("%s pinctrl set failed\n", __func__);
 				goto err;
@@ -1131,11 +1130,11 @@ static void mdm_auxpcm_shutdown(struct snd_pcm_substream *substream)
 	struct mdm_machine_data *pdata = snd_soc_card_get_drvdata(card);
 
 	if (pdata->prim_auxpcm_mode == 1)
-		ret = msm_gpioset_suspend(CLIENT_WCD_EXT,
-					"pri_mi2s_aux_master");
+		ret = wcd_gpio_ctrl_select_sleep_state
+					(pdata->prim_master_p);
 	else
-		ret = msm_gpioset_suspend(CLIENT_WCD_EXT,
-					"pri_mi2s_aux_slave");
+		ret = wcd_gpio_ctrl_select_sleep_state
+					(pdata->prim_slave_p);
 	if (ret)
 		pr_err("%s: failed to set prim gpios to sleep: %d\n",
 				__func__, ret);
@@ -1177,13 +1176,13 @@ static int mdm_auxpcm_startup(struct snd_pcm_substream *substream)
 	}
 
 	if (pdata->prim_auxpcm_mode == 1) {
-		ret = msm_gpioset_activate(CLIENT_WCD_EXT,
-					"pri_mi2s_aux_master");
+		ret = wcd_gpio_ctrl_select_active_state
+						(pdata->prim_master_p);
 		if (ret < 0)
 			pr_err("%s pinctrl set failed\n", __func__);
 	} else {
-		ret = msm_gpioset_activate(CLIENT_WCD_EXT,
-					"pri_mi2s_aux_slave");
+		ret = wcd_gpio_ctrl_select_active_state
+						(pdata->prim_slave_p);
 		if (ret < 0)
 			pr_err("%s pinctrl set failed\n", __func__);
 	}
@@ -1205,11 +1204,11 @@ static void mdm_sec_auxpcm_shutdown(struct snd_pcm_substream *substream)
 	struct mdm_machine_data *pdata = snd_soc_card_get_drvdata(card);
 
 	if (pdata->sec_auxpcm_mode == 1)
-		ret = msm_gpioset_suspend(CLIENT_WCD_EXT,
-					"sec_mi2s_aux_master");
+		ret = wcd_gpio_ctrl_select_sleep_state
+				(pdata->sec_master_p);
 	else
-		ret = msm_gpioset_suspend(CLIENT_WCD_EXT,
-					"sec_mi2s_aux_slave");
+		ret = wcd_gpio_ctrl_select_sleep_state
+				(pdata->sec_slave_p);
 	if (ret)
 		pr_err("%s: failed to set sec gpios to sleep: %d\n",
 			__func__, ret);
@@ -1252,13 +1251,13 @@ static int mdm_sec_auxpcm_startup(struct snd_pcm_substream *substream)
 	}
 
 	if (pdata->sec_auxpcm_mode == 1) {
-		ret = msm_gpioset_activate(CLIENT_WCD_EXT,
-					"sec_mi2s_aux_master");
+		ret = wcd_gpio_ctrl_select_active_state
+					(pdata->sec_master_p);
 		if (ret < 0)
 			pr_err("%s pinctrl set failed\n", __func__);
 	} else {
-		ret = msm_gpioset_activate(CLIENT_WCD_EXT,
-					"sec_mi2s_aux_slave");
+		ret = wcd_gpio_ctrl_select_active_state
+					(pdata->sec_slave_p);
 		if (ret < 0)
 			pr_err("%s pinctrl set failed\n", __func__);
 	}
@@ -1952,99 +1951,6 @@ static struct snd_soc_dai_link mdm_dai[] = {
 		.ignore_suspend = 1,
 		 .ignore_pmdown_time = 1,
 	},
-	{
-		.name = "Secondary MI2S RX Hostless",
-		.stream_name = "Secondary MI2S_RX Hostless Playback",
-		.cpu_dai_name = "SEC_MI2S_RX_HOSTLESS",
-		.platform_name  = "msm-pcm-hostless",
-		.dynamic = 1,
-		.dpcm_playback = 1,
-		.dpcm_capture = 1,
-		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
-			    SND_SOC_DPCM_TRIGGER_POST},
-		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
-		.ignore_suspend = 1,
-		.ignore_pmdown_time = 1,
-		.codec_dai_name = "snd-soc-dummy-dai",
-		.codec_name = "snd-soc-dummy",
-	},
-	{
-		.name = "Secondary MI2S TX Hostless",
-		.stream_name = "Secondary MI2S_TX Hostless Playback",
-		.cpu_dai_name = "SEC_MI2S_TX_HOSTLESS",
-		.platform_name  = "msm-pcm-hostless",
-		.dynamic = 1,
-		.dpcm_capture = 1,
-		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
-			    SND_SOC_DPCM_TRIGGER_POST},
-		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
-		.ignore_suspend = 1,
-		.ignore_pmdown_time = 1,
-		.codec_dai_name = "snd-soc-dummy-dai",
-		.codec_name = "snd-soc-dummy",
-	},
-	{
-		.name = "Primary AUXPCM RX Hostless",
-		.stream_name = "AUXPCM_HOSTLESS Playback",
-		.cpu_dai_name = "AUXPCM_HOSTLESS",
-		.platform_name  = "msm-pcm-hostless",
-		.dynamic = 1,
-		.dpcm_playback = 1,
-		.dpcm_capture = 1,
-		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
-			    SND_SOC_DPCM_TRIGGER_POST},
-		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
-		.ignore_suspend = 1,
-		.ignore_pmdown_time = 1,
-		.codec_dai_name = "snd-soc-dummy-dai",
-		.codec_name = "snd-soc-dummy",
-	},
-	{
-		.name = "Primary AUXPCM TX Hostless",
-		.stream_name = "AUXPCM_HOSTLESS Capture",
-		.cpu_dai_name = "AUXPCM_HOSTLESS",
-		.platform_name  = "msm-pcm-hostless",
-		.dynamic = 1,
-		.dpcm_capture = 1,
-		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
-			    SND_SOC_DPCM_TRIGGER_POST},
-		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
-		.ignore_suspend = 1,
-		.ignore_pmdown_time = 1,
-		.codec_dai_name = "snd-soc-dummy-dai",
-		.codec_name = "snd-soc-dummy",
-	},
-	{
-		.name = "Secondary AUXPCM RX Hostless",
-		.stream_name = "SEC_AUXPCM_HOSTLESS Playback",
-		.cpu_dai_name = "SEC_AUXPCM_RX_HOSTLESS",
-		.platform_name  = "msm-pcm-hostless",
-		.dynamic = 1,
-		.dpcm_playback = 1,
-		.dpcm_capture = 1,
-		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
-			    SND_SOC_DPCM_TRIGGER_POST},
-		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
-		.ignore_suspend = 1,
-		.ignore_pmdown_time = 1,
-		.codec_dai_name = "snd-soc-dummy-dai",
-		.codec_name = "snd-soc-dummy",
-	},
-	{
-		.name = "Secondary AUXPCM TX Hostless",
-		.stream_name = "SEC_AUXPCM_HOSTLESS Capture",
-		.cpu_dai_name = "SEC_AUXPCM_TX_HOSTLESS",
-		.platform_name  = "msm-pcm-hostless",
-		.dynamic = 1,
-		.dpcm_capture = 1,
-		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
-			    SND_SOC_DPCM_TRIGGER_POST},
-		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
-		.ignore_suspend = 1,
-		.ignore_pmdown_time = 1,
-		.codec_dai_name = "snd-soc-dummy-dai",
-		.codec_name = "snd-soc-dummy",
-	},
 	/* Backend DAI Links */
 	{
 		.name = LPASS_BE_AFE_PCM_RX,
@@ -2642,12 +2548,14 @@ static int mdm_asoc_machine_probe(struct platform_device *pdev)
 		goto err;
 	}
 
-	ret = msm_gpioset_initialize(CLIENT_WCD_EXT, &pdev->dev);
-	if (ret < 0) {
-		dev_err(&pdev->dev, "Error reading dtsi file for gpios\n");
-		return -EINVAL;
-	}
-
+	pdata->prim_master_p = of_parse_phandle(pdev->dev.of_node,
+						"qcom,prim_mi2s_aux_master", 0);
+	pdata->prim_slave_p = of_parse_phandle(pdev->dev.of_node,
+						"qcom,prim_mi2s_aux_slave", 0);
+	pdata->sec_master_p = of_parse_phandle(pdev->dev.of_node,
+						"qcom,sec_mi2s_aux_master", 0);
+	pdata->sec_slave_p = of_parse_phandle(pdev->dev.of_node,
+						"qcom,sec_mi2s_aux_slave", 0);
 	mutex_init(&cdc_mclk_mutex);
 	atomic_set(&mi2s_ref_count, 0);
 	atomic_set(&sec_mi2s_ref_count, 0);

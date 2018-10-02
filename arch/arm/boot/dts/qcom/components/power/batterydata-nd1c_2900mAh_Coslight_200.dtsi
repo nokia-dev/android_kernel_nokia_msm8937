@@ -1,0 +1,73 @@
+/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+qcom,fih-nd1-4v4-2900mah-200k {
+	qcom,nom-batt-capacity-mah = <2900>;
+	qcom,max-voltage-uv = <4400000>;
+	qcom,v-cutoff-uv = <3400000>;
+	qcom,chg-term-ua = <100000>;
+	qcom,batt-id-kohm = <200>;
+	qcom,battery-type = "MSM8937_ND1_Coslight_200k_battery";
+	qcom,cool-bat-decidegc = <150>;
+	qcom,battery-beta = <3435>;
+	qcom,chg-rslow-comp-c1 = <3912226>;
+	qcom,chg-rslow-comp-c2 = <5965283>;
+	qcom,chg-rs-to-rslow = <1402672>;
+	qcom,chg-rslow-comp-thr = <0xAC>;
+	qcom,checksum = <0xA021>;
+	qcom,gui-version = "PMI8950GUI - 2.0.0.16";
+
+	qcom,fastchg-current-ma = <2000>;
+	qcom,fastchg-current-comp = <1200>; // high temp
+	
+	qcom,high-float-voltage-comp = <16>; /* need change to 16 if float-voltage change to 4.4 */
+	qcom,low-float-voltage-comp = <0>; /* 4.4 */
+	qcom,high-fastchg-current-comp = <1200>;
+	qcom,low-fastchg-current-comp = <700>;
+	
+	qcom,fg-cc-cv-threshold-mv = <4380>;
+	qcom,thermal-coefficients = [C5 86 BE 50 D1 37];
+	qcom,fg-profile-data = [
+		 F7 83 B9 7D 
+		 EE 81 8E 7C 
+		 5C 83 E1 6C 
+		 AC 83 C3 8D 
+		 0E 82 85 99 
+		 E5 B7 A6 C3 
+		 5D 12 17 88 
+		 28 7F ED 82 
+		 7A 7D 53 83 
+		 A2 6A 05 78 
+		 CB 84 32 82 
+		 49 9A A5 BD 
+		 F7 CA 60 0E 
+		 81 0B A7 5B 
+		 14 70 84 FE 
+		 21 40 87 47 
+		 3E 35 00 00 
+		 9A 4C 80 2A 
+		 07 41 00 00 
+		 00 00 00 00 
+		 00 00 00 00 
+		 4B 73 3C 70 
+		 15 8C BB 71 
+		 6E 7E 35 78 
+		 08 6D CE 7A 
+		 4A 77 C1 6B 
+		 BA 60 9B A2 
+		 2D 06 61 DE 
+		 5F A0 71 0C 
+		 28 00 FF 36 
+		 F0 11 30 03 
+		 00 00 00 0C 
+	];
+};

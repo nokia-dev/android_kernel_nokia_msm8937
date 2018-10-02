@@ -513,6 +513,7 @@ static int android_enable(struct android_dev *dev)
 			err = usb_add_config(cdev, &conf->usb_config,
 						android_bind_config);
 			if (err < 0) {
+				printk("BBox::UEC;3::2\n"); //   add bbs log
 				pr_err("%s: usb_add_config failed : err: %d\n",
 						__func__, err);
 				return err;
@@ -1064,32 +1065,6 @@ static struct android_usb_function rmnet_function = {
 	.attributes	= rmnet_function_attributes,
 };
 
-static char gps_transport[MAX_XPORT_STR_LEN];
-
-static ssize_t gps_transport_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	return snprintf(buf, PAGE_SIZE, "%s\n", gps_transport);
-}
-
-static ssize_t gps_transport_store(
-		struct device *device, struct device_attribute *attr,
-		const char *buff, size_t size)
-{
-	strlcpy(gps_transport, buff, sizeof(gps_transport));
-
-	return size;
-}
-
-static struct device_attribute dev_attr_gps_transport =
-					__ATTR(transport, S_IRUGO | S_IWUSR,
-							gps_transport_show,
-							gps_transport_store);
-
-static struct device_attribute *gps_function_attrbitutes[] = {
-					&dev_attr_gps_transport,
-					NULL };
-
 static void gps_function_cleanup(struct android_usb_function *f)
 {
 	gps_cleanup();
@@ -1100,13 +1075,10 @@ static int gps_function_bind_config(struct android_usb_function *f,
 {
 	int err;
 	static int gps_initialized;
-	char buf[MAX_XPORT_STR_LEN], *b;
 
 	if (!gps_initialized) {
-		strlcpy(buf, gps_transport, sizeof(buf));
-		b = strim(buf);
 		gps_initialized = 1;
-		err = gps_init_port(b);
+		err = gps_init_port();
 		if (err) {
 			pr_err("gps: Cannot init gps port");
 			return err;
@@ -1131,7 +1103,6 @@ static struct android_usb_function gps_function = {
 	.name		= "gps",
 	.cleanup	= gps_function_cleanup,
 	.bind_config	= gps_function_bind_config,
-	.attributes	= gps_function_attrbitutes,
 };
 
 /* ncm */
@@ -2837,6 +2808,8 @@ static int mass_storage_function_init(struct android_usb_function *f,
 	}
 
 	fsg_mod_data.removable[0] = true;
+	fsg_mod_data.cdrom[0] = true;//,add for CD-ROM
+  fsg_mod_data.ro[0] = true;//,add for CD-ROM
 	fsg_config_from_params(&m_config, &fsg_mod_data, fsg_num_buffers);
 	fsg_opts = fsg_opts_from_func_inst(config->f_ms_inst);
 	ret = fsg_common_set_num_buffers(fsg_opts->common, fsg_num_buffers);
@@ -3770,6 +3743,7 @@ static ssize_t enable_store(struct device *pdev, struct device_attribute *attr,
 			msleep(100);
 		err = android_enable(dev);
 		if (err < 0) {
+			printk("BBox::UEC;3::0\n"); //   add for bbs log
 			pr_err("%s: android_enable failed\n", __func__);
 			dev->connected = 0;
 			dev->enabled = true;
@@ -4562,3 +4536,8 @@ static void __exit cleanup(void)
 	platform_driver_unregister(&android_platform_driver);
 }
 module_exit(cleanup);
+int android_usb_product_id(void)
+{
+       return device_desc.idProduct;
+}
+EXPORT_SYMBOL(android_usb_product_id);

@@ -66,6 +66,18 @@ enum fps_resolution {
 /* HDR propeties count */
 #define DISPLAY_PRIMARIES_COUNT	8	/* WRGB x and y values*/
 
+//Display-ImplementPanelID-00+{_20151112
+enum {	//this id syncs with the item 'fih,panel-id' of each panel's dtsi
+	FIH_R61322_1080P_VIDEO_PANEL = 0,
+	FIH_ILI7807E_1080P_VIDEO_PANEL,
+	FIH_HX8394A_720P_VIDEO_PANEL,
+	FIH_NT35521_720P_VIDEO_PANEL,
+	FIH_NT35521S_720P_VIDEO_PANEL,
+	FIH_PJ050IA_NT35521S_720P_VIDEO_PANEL,
+	FIH_SHARP_FT8607_720P_VIDEO_PANEL,
+};
+//Display-ImplementPanelID-00+}_20151112
+
 static inline const char *mdss_panel2str(u32 panel)
 {
 	static const char const *names[] = {
@@ -619,10 +631,13 @@ struct mdss_panel_info {
 	u32 yres;
 	u32 physical_width;
 	u32 physical_height;
+	u32 physical_width_full;	//Display-CTS_Xdpi_Ydpi-00+_20151112
+	u32 physical_height_full;	//Display-CTS_Xdpi_Ydpi-00+_20151112
 	u32 bpp;
 	u32 type;
 	u32 wait_cycle;
 	u32 pdest;
+	bool sharp_bl_mapping; // -  - MA3-589 - Apply SHARP backlight mapping rule
 	u32 brightness_max;
 	u32 bl_max;
 	u32 bl_min;
@@ -753,6 +768,8 @@ struct mdss_panel_info {
 
 	/* HDR properties of display panel*/
 	struct mdss_panel_hdr_properties hdr_properties;
+
+	int pid;	//Display-ImplementPanelID-00+_20151112
 };
 
 struct mdss_panel_timing {

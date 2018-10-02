@@ -17,6 +17,7 @@
 #include "camera.h"
 #include "msm_cci.h"
 #include "msm_camera_dt_util.h"
+#include "fih_read_sensor_id.h"
 
 /* Logging macro */
 #undef CDBG
@@ -29,6 +30,17 @@ static int32_t msm_sensor_driver_platform_probe(struct platform_device *pdev);
 
 /* Static declaration */
 static struct msm_sensor_ctrl_t *g_sctrl[MAX_CAMERAS];
+
+//, add for debug,start
+#define FIH_DEBUG
+#ifdef FIH_DEBUG
+static struct kobject *fih_camera_kernel_kobj = NULL;
+static uint16_t fih_camera_read_register_value=0;
+static unsigned int fih_camera_read_register_reg=0;
+#endif
+//, add for debug,end
+
+extern int fih_camera_dev_init(struct msm_camera_sensor_slave_info *slave_info, char *sensorid);
 
 static int msm_sensor_platform_remove(struct platform_device *pdev)
 {
@@ -344,42 +356,6 @@ static int32_t msm_sensor_fill_ois_subdevid_by_name(
 	return rc;
 }
 
-static int32_t msm_sensor_fill_flash_subdevid_by_name(
-				struct msm_sensor_ctrl_t *s_ctrl)
-{
-	int32_t rc = 0;
-	struct device_node *src_node = NULL;
-	uint32_t val = 0;
-	int32_t *flash_subdev_id;
-	struct  msm_sensor_info_t *sensor_info;
-	struct device_node *of_node = s_ctrl->of_node;
-
-	if (!of_node)
-		return -EINVAL;
-
-	sensor_info = s_ctrl->sensordata->sensor_info;
-	flash_subdev_id = &sensor_info->subdev_id[SUB_MODULE_LED_FLASH];
-
-	*flash_subdev_id = -1;
-
-	src_node = of_parse_phandle(of_node, "qcom,led-flash-src", 0);
-	if (!src_node) {
-		CDBG("%s:%d src_node NULL\n", __func__, __LINE__);
-	} else {
-		rc = of_property_read_u32(src_node, "cell-index", &val);
-		CDBG("%s qcom,flash cell index %d, rc %d\n", __func__,
-			val, rc);
-		if (rc < 0) {
-			pr_err("%s failed %d\n", __func__, __LINE__);
-			return -EINVAL;
-		}
-		*flash_subdev_id = val;
-		of_node_put(src_node);
-		src_node = NULL;
-	}
-	return rc;
-}
-
 static int32_t msm_sensor_fill_slave_info_init_params(
 	struct msm_camera_sensor_slave_info *slave_info,
 	struct msm_sensor_info_t *sensor_info)
@@ -678,6 +654,168 @@ static void msm_sensor_fill_sensor_info(struct msm_sensor_ctrl_t *s_ctrl,
 }
 
 /* static function definition */
+static int32_t msm_sensor_driver_is_special_support(
+	struct msm_sensor_ctrl_t *s_ctrl,
+	char *sensor_name)
+{
+	int32_t rc = 0;
+	int32_t i = 0;
+	struct msm_camera_sensor_board_info *sensordata = s_ctrl->sensordata;
+	for (i = 0; i < sensordata->special_support_size; i++) {
+		if (!strcmp(sensordata->special_support_sensors[i],
+						 sensor_name)) {
+			rc = TRUE;
+			break;
+		}
+	}
+	return rc;
+}
+
+static int fih_get_read_mem_size(fih_mem_map_t *eeprom_map) {
+    int size = 0, i;
+    if (eeprom_map->memory_map_size > MSM_EEPROM_MEMORY_MAP_MAX_SIZE) {
+        pr_err("%s:%d Memory map size greter then expected: %d",__func__, __LINE__,
+                eeprom_map->memory_map_size);
+        return -EINVAL;
+    }
+    for (i = 0; i < eeprom_map->memory_map_size; i++) {
+        if (eeprom_map->mem_settings[i].i2c_operation == MSM_CAM_READ) {
+          size += eeprom_map->mem_settings[i].reg_data;
+        }
+    }
+    pr_debug("%s:%d Total Data Size: %d\n",__func__, __LINE__, size);
+    return size;
+}
+static void * fih_read_sensor_id(struct msm_sensor_ctrl_t *e_ctrl,char *sensor_name)
+{
+    int rc=0,num_data=0,i=0,length=0,max_buf_len=0;
+    uint8_t *memptr = NULL ,*mapdata = NULL;
+    fih_mem_map_t *eeprom_map = NULL;
+    char* buffer=NULL;
+    int array_size = (int)(sizeof(fih_sensor_id_map)/sizeof(fih_mem_map_t));
+
+    pr_debug("%s:%d fih_sensor_id_map array_size = %d\n",__func__, __LINE__,array_size);
+    if(array_size<=0)
+    {
+        pr_err("%s:%d invalid array_size\n",__func__, __LINE__);
+        goto fail2;
+    }
+
+    pr_debug("%s:%d matching sensor_name=%s\n",__func__, __LINE__,sensor_name);
+    for (i=0;i<array_size;i++)
+    {
+        pr_debug("%s:%d module_name=%s\n",__func__, __LINE__,fih_sensor_id_map[i].module_name);
+        if(!strncmp(sensor_name,fih_sensor_id_map[i].module_name,32))
+        {
+            eeprom_map=&fih_sensor_id_map[i];
+            break;
+        }
+    }
+    if(!eeprom_map)
+    {
+        pr_err("%s:%d  no sensor id map\n",__func__, __LINE__);
+        goto fail2;
+    }
+
+    pr_debug("%s:%d Slave Addr: 0x%X\n",__func__, __LINE__,eeprom_map->slave_addr);
+    pr_debug("%s:%d Memory map Size: %d\n",__func__, __LINE__,eeprom_map->memory_map_size);
+
+    num_data = fih_get_read_mem_size(eeprom_map);
+    if (num_data<=0)
+    {
+        pr_err("%s:%d  no data need to read\n",__func__, __LINE__);
+        goto fail2;
+    }
+
+    mapdata = kzalloc(num_data, GFP_KERNEL);
+    if(!mapdata)
+    {
+        pr_err("%s:%d alloc memory fail\n",__func__, __LINE__);
+        goto fail2;
+    }
+
+    memptr = mapdata;
+    if (e_ctrl->sensor_i2c_client->cci_client) {
+        e_ctrl->sensor_i2c_client->cci_client->sid =
+            eeprom_map->slave_addr >> 1;
+    }else if (e_ctrl->sensor_i2c_client->client) {
+        e_ctrl->sensor_i2c_client->client->addr =
+            eeprom_map->slave_addr >> 1;
+    }
+
+    for (i = 0; i < eeprom_map->memory_map_size; i++) {
+        switch (eeprom_map->mem_settings[i].i2c_operation) {
+            case MSM_CAM_WRITE: {
+                e_ctrl->sensor_i2c_client->addr_type = eeprom_map->mem_settings[i].addr_type;
+                rc = e_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_write(
+                     e_ctrl->sensor_i2c_client,
+                     eeprom_map->mem_settings[i].reg_addr,
+                     eeprom_map->mem_settings[i].reg_data,
+                     eeprom_map->mem_settings[i].data_type);
+                msleep(eeprom_map->mem_settings[i].delay);
+                if (rc < 0) {
+                    pr_err("%s:%d page write failed\n",__func__, __LINE__);
+                    goto fail;
+                }
+            }
+            break;
+            case MSM_CAM_POLL: {
+                e_ctrl->sensor_i2c_client->addr_type = eeprom_map->mem_settings[i].addr_type;
+                rc = e_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_poll(
+                     e_ctrl->sensor_i2c_client,
+                     eeprom_map->mem_settings[i].reg_addr,
+                     eeprom_map->mem_settings[i].reg_data,
+                     eeprom_map->mem_settings[i].data_type,
+                     eeprom_map->mem_settings[i].delay);
+                if (rc < 0) {
+                    pr_err("%s:%d poll failed\n",__func__, __LINE__);
+                    goto fail;
+                }
+            }
+            break;
+            case MSM_CAM_READ: {
+                e_ctrl->sensor_i2c_client->addr_type = eeprom_map->mem_settings[i].addr_type;
+                rc = e_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_read_seq(
+                     e_ctrl->sensor_i2c_client,
+                     eeprom_map->mem_settings[i].reg_addr,
+                     memptr,
+                     eeprom_map->mem_settings[i].reg_data);
+                     msleep(eeprom_map->mem_settings[i].delay);
+                if (rc < 0) {
+                    pr_err("%s:%d read failed\n",__func__, __LINE__);
+                    goto fail;
+                }
+                memptr += eeprom_map->mem_settings[i].reg_data;
+            }
+            break;
+            default:
+                pr_err("%s: %d Invalid i2c operation LC:%d\n",__func__, __LINE__, i);
+                goto fail;
+        }
+    }
+
+    max_buf_len = num_data*2+1;
+    buffer = kzalloc(max_buf_len, GFP_KERNEL);
+    if (!buffer)
+        goto fail;
+
+    memptr = mapdata;
+    for (i=0;i<num_data;i++)
+    {
+        pr_debug("%s:%d memory_data[%d] = 0x%02X\n",__func__, __LINE__, i, memptr[i]);
+        length += snprintf(buffer+length, max_buf_len-length, "%02X",memptr[i]);
+    }
+
+    pr_err("%s: %d sensor id = %s\n",__func__, __LINE__,buffer);
+    return buffer;
+
+fail:
+  kfree(mapdata);
+fail2:
+  return NULL;
+}
+
+/* static function definition */
 int32_t msm_sensor_driver_probe(void *setting,
 	struct msm_sensor_info_t *probed_info, char *entity_name)
 {
@@ -821,6 +959,16 @@ int32_t msm_sensor_driver_probe(void *setting,
 
 	CDBG("s_ctrl[%d] %pK", slave_info->camera_id, s_ctrl);
 
+	if (s_ctrl->sensordata->special_support_size > 0) {
+		if (!msm_sensor_driver_is_special_support(s_ctrl,
+			slave_info->sensor_name)) {
+			pr_err("%s:%s is not support on this board\n",
+				__func__, slave_info->sensor_name);
+			rc = 0;
+			goto free_slave_info;
+		}
+	}
+
 	if (s_ctrl->is_probe_succeed == 1) {
 		/*
 		 * Different sensor on this camera slot has been connected
@@ -929,7 +1077,6 @@ CSID_TG:
 	s_ctrl->sensordata->eeprom_name = slave_info->eeprom_name;
 	s_ctrl->sensordata->actuator_name = slave_info->actuator_name;
 	s_ctrl->sensordata->ois_name = slave_info->ois_name;
-	s_ctrl->sensordata->flash_name = slave_info->flash_name;
 	/*
 	 * Update eeporm subdevice Id by input eeprom name
 	 */
@@ -953,12 +1100,6 @@ CSID_TG:
 		goto free_camera_info;
 	}
 
-	rc = msm_sensor_fill_flash_subdevid_by_name(s_ctrl);
-	if (rc < 0) {
-		pr_err("%s failed %d\n", __func__, __LINE__);
-		goto free_camera_info;
-	}
-
 	/* Power up and probe sensor */
 	rc = s_ctrl->func_tbl->sensor_power_up(s_ctrl);
 	if (rc < 0) {
@@ -967,6 +1108,7 @@ CSID_TG:
 	}
 
 	pr_err("%s probe succeeded", slave_info->sensor_name);
+	fih_camera_dev_init(slave_info,fih_read_sensor_id(s_ctrl,slave_info->sensor_name));
 
 	s_ctrl->bypass_video_node_creation =
 		slave_info->bypass_video_node_creation;
@@ -1045,6 +1187,7 @@ static int32_t msm_sensor_driver_get_dt_data(struct msm_sensor_ctrl_t *s_ctrl)
 	struct msm_camera_sensor_board_info *sensordata = NULL;
 	struct device_node                  *of_node = s_ctrl->of_node;
 	uint32_t cell_id;
+	int32_t  i;
 
 	s_ctrl->sensordata = kzalloc(sizeof(*sensordata), GFP_KERNEL);
 	if (!s_ctrl->sensordata) {
@@ -1077,6 +1220,35 @@ static int32_t msm_sensor_driver_get_dt_data(struct msm_sensor_ctrl_t *s_ctrl)
 		pr_err("failed: sctrl already filled for cell_id %d", cell_id);
 		rc = -EINVAL;
 		goto FREE_SENSOR_DATA;
+	}
+
+	sensordata->special_support_size =
+		of_property_count_strings(of_node,
+				 "qcom,special-support-sensors");
+
+	if (sensordata->special_support_size < 0)
+		sensordata->special_support_size = 0;
+
+	if (sensordata->special_support_size > MAX_SPECIAL_SUPPORT_SIZE) {
+		pr_err("%s:support_size exceed max support size\n", __func__);
+		sensordata->special_support_size = MAX_SPECIAL_SUPPORT_SIZE;
+	}
+
+	if (sensordata->special_support_size) {
+		for (i = 0; i < sensordata->special_support_size; i++) {
+			rc = of_property_read_string_index(of_node,
+				"qcom,special-support-sensors", i,
+				&(sensordata->special_support_sensors[i]));
+			if (rc < 0) {
+				/* if read sensor support names failed,
+				*   set support all sensors, break;
+				*/
+				sensordata->special_support_size = 0;
+				break;
+			}
+			CDBG("%s special_support_sensors[%d] = %s\n", __func__,
+				i, sensordata->special_support_sensors[i]);
+		}
 	}
 
 	/* Read subdev info */
@@ -1168,6 +1340,62 @@ FREE_SENSOR_DATA:
 	return rc;
 }
 
+//, add for debug,start
+#ifdef FIH_DEBUG
+static ssize_t fih_camera_read_register_store(struct device *dev, struct  device_attribute *attr, const char *buf, size_t size)
+{
+	unsigned int reg = 0,id=0;
+	uint16_t value = 0;
+	struct msm_sensor_ctrl_t  *s_ctrl;
+
+	if (sscanf(buf, "%d,%x",&id, &reg) <= 0) {
+		pr_err("Could not tranform the register value\n");
+		return -EINVAL;
+	}
+
+	s_ctrl = g_sctrl[id];
+	s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_read(s_ctrl->sensor_i2c_client, reg, &value, MSM_CAMERA_I2C_BYTE_DATA);
+
+	pr_err("Register 0x%X: 0x%X\n", reg, value);
+	fih_camera_read_register_value=value;
+	fih_camera_read_register_reg=reg;
+	return 1;//strlen("fih_camera_read_register_store\n");
+}
+static ssize_t fih_camera_read_register_show(struct device *dev, struct  device_attribute *attr , char *buf)
+{
+	sprintf(buf, "read register:0x%x,value=0x%x\n",fih_camera_read_register_reg, fih_camera_read_register_value);
+	return strlen(buf);
+}
+static ssize_t fih_camera_write_register_store(struct device *dev, struct  device_attribute *attr, const char *buf, size_t size)
+{
+	unsigned int rc=0,reg = 0,value=0, id=0;
+	struct msm_sensor_ctrl_t  *s_ctrl;
+
+	if (sscanf(buf, "%d,%x,%x", &id , &reg , &value) <= 0) {
+		pr_err("Could not tranform the register value\n");
+		return -EINVAL;
+	}
+	s_ctrl = g_sctrl[id];
+	s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_write(s_ctrl->sensor_i2c_client, (uint16_t)reg, (uint16_t) value, MSM_CAMERA_I2C_BYTE_DATA);
+	pr_err("Write Register 0x%X: 0x%X\n", reg, value);
+	if(rc){
+		pr_err("Write Register fail\n");
+	}
+	return 1;//strlen("fih_camera_read_register_store\n");
+}
+static DEVICE_ATTR(register_read, 0644, fih_camera_read_register_show, fih_camera_read_register_store);
+static DEVICE_ATTR(register_write, 0644, NULL, fih_camera_write_register_store);
+static struct attribute *fih_camera_attributes[] = {
+		&dev_attr_register_read.attr,
+		&dev_attr_register_write.attr,
+		NULL
+};
+static const struct attribute_group fih_camera_attr_group = {
+		.attrs = fih_camera_attributes,
+};
+#endif
+//, add for debug,end
+
 static int32_t msm_sensor_driver_parse(struct msm_sensor_ctrl_t *s_ctrl)
 {
 	int32_t                   rc = 0;
@@ -1221,12 +1449,23 @@ static int32_t msm_sensor_driver_parse(struct msm_sensor_ctrl_t *s_ctrl)
 	g_sctrl[s_ctrl->id] = s_ctrl;
 	CDBG("g_sctrl[%d] %pK", s_ctrl->id, g_sctrl[s_ctrl->id]);
 
+//, add for debug,start
+#ifdef FIH_DEBUG
+	if(fih_camera_kernel_kobj == NULL)
+	{
+		fih_camera_kernel_kobj = kobject_create_and_add("fih_camera_control", kernel_kobj);
+		rc = sysfs_create_group(fih_camera_kernel_kobj, &fih_camera_attr_group);
+		if (rc)
+			kobject_put(fih_camera_kernel_kobj);
+	}
+#endif
+//, add for debug,end
+
 	return rc;
 
 FREE_DT_DATA:
 	kfree(s_ctrl->sensordata->power_info.gpio_conf->gpio_num_info);
 	kfree(s_ctrl->sensordata->power_info.gpio_conf->cam_gpio_req_tbl);
-	kfree(s_ctrl->sensordata->power_info.gpio_conf->cam_gpio_set_tbl);
 	kfree(s_ctrl->sensordata->power_info.gpio_conf);
 	kfree(s_ctrl->sensordata->power_info.cam_vreg);
 	kfree(s_ctrl->sensordata);

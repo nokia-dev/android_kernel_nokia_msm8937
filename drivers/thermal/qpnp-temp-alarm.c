@@ -277,7 +277,10 @@ static int qpnp_tz_get_temp_no_adc(struct thermal_zone_device *thermal,
 
 	rc = qpnp_tm_update_temp_no_adc(chip);
 	if (rc < 0)
-		return rc;
+		{
+			printk("BBox::UEC;22::8\n");
+			return rc;
+		}
 
 	*temperature = chip->temperature;
 
@@ -295,6 +298,7 @@ static int qpnp_tz_get_temp_qpnp_adc(struct thermal_zone_device *thermal,
 
 	rc = qpnp_tm_update_temp(chip);
 	if (rc < 0) {
+		printk("BBox::UEC;22::8\n");
 		dev_err(&chip->spmi_dev->dev, "%s: %s: adc read failed, rc = %d\n",
 			__func__, chip->tm_name, rc);
 		return rc;
@@ -434,7 +438,10 @@ static void qpnp_tm_work(struct work_struct *work)
 	if (chip->adc_type == QPNP_TM_ADC_NONE) {
 		rc = qpnp_tm_update_temp_no_adc(chip);
 		if (rc < 0)
-			goto bail;
+			{
+				printk("BBox::UEC;22::8\n");
+				goto bail;
+			}
 	} else {
 		rc = qpnp_tm_get_temp_stage(chip, &chip->stage);
 		if (rc < 0)
@@ -442,7 +449,10 @@ static void qpnp_tm_work(struct work_struct *work)
 
 		rc = qpnp_tm_update_temp(chip);
 		if (rc < 0)
-			goto bail;
+			{
+				printk("BBox::UEC;22::8\n");
+				goto bail;
+			}
 	}
 
 	if (chip->subtype == QPNP_TM_SUBTYPE_GEN1) {
@@ -547,6 +557,7 @@ static int qpnp_tm_probe(struct spmi_device *spmi)
 	if (!chip) {
 		dev_err(&spmi->dev, "%s: Can't allocate qpnp_tm_chip\n",
 			__func__);
+		printk("BBox::UEC;20::0\n");
 		return -ENOMEM;
 	}
 
@@ -694,6 +705,7 @@ static int qpnp_tm_probe(struct spmi_device *spmi)
 	if (rc < 0) {
 		dev_err(&spmi->dev, "%s: request_irq(%d) failed: %d\n",
 			__func__, chip->irq, rc);
+		printk("BBox::UEC;20::2\n");
 		goto err_free_tz;
 	}
 

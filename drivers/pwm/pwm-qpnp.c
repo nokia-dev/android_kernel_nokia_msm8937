@@ -1444,7 +1444,7 @@ static void qpnp_pwm_disable(struct pwm_chip *pwm_chip,
 
 static int _pwm_change_mode(struct qpnp_pwm_chip *chip, enum pm_pwm_mode mode)
 {
-	int rc;
+	int rc=0; //FIH,Michael, give rc a initial value to avoid qpnp_pwm_init fail
 
 	if (mode)
 		rc = qpnp_configure_lpg_control(chip);

@@ -493,6 +493,13 @@ config HAVE_IRQ_EXIT_ON_IRQ_STACK
 	  This spares a stack switch and improves cache usage on softirq
 	  processing.
 
+config ARCH_HAS_ELF_RANDOMIZE
+	bool
+	help
+	  An architecture supports choosing randomized locations for
+	  stack, mmap, brk, and ET_DYN. Defined functions:
+	  - arch_mmap_rnd()
+
 config HAVE_ARCH_MMAP_RND_BITS
 	bool
 	help
@@ -560,13 +567,6 @@ config ARCH_MMAP_RND_COMPAT_BITS
 
 	  This value can be changed after boot using the
 	  /proc/sys/vm/mmap_rnd_compat_bits tunable
-
-config ARCH_HAS_ELF_RANDOMIZE
-	bool
-	help
-	  An architecture supports choosing randomized locations for
-	  stack, mmap, brk, and ET_DYN. Defined functions:
-	  - arch_mmap_rnd()
 
 #
 # ABI hall of shame

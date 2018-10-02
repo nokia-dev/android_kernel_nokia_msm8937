@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -17,9 +17,27 @@
 #include "msm_camera_i2c_mux.h"
 #include <linux/regulator/rpm-smd-regulator.h>
 #include <linux/regulator/consumer.h>
+#include "fih/fih_bbs_camera.h" //, add BBS log
+#include "fih_msm_sensor_recover.h" //, add
 
 #undef CDBG
 #define CDBG(fmt, args...) pr_debug(fmt, ##args)
+
+//, add BBS log
+extern void fih_bbs_camera_msg_by_addr(int, int);
+
+//SW4-RL-Camera BBS log-00+{_20170216
+extern void fih_bbs_camera_msg_by_soensor_info(int, const char *, int, const char *, int);
+const char *actuatorName;
+EXPORT_SYMBOL(actuatorName);
+//#include <linux/ctype.h>
+
+const char *sensorName;
+EXPORT_SYMBOL(sensorName);
+
+int pos = 0;
+EXPORT_SYMBOL(pos);
+//SW4-RL-Camera BBS log-00+}_20170216
 
 static struct msm_camera_i2c_fn_t msm_sensor_cci_func_tbl;
 static struct msm_camera_i2c_fn_t msm_sensor_secure_func_tbl;
@@ -88,7 +106,6 @@ int32_t msm_sensor_free_sensor_data(struct msm_sensor_ctrl_t *s_ctrl)
 	kfree(s_ctrl->sensordata->actuator_info);
 	kfree(s_ctrl->sensordata->power_info.gpio_conf->gpio_num_info);
 	kfree(s_ctrl->sensordata->power_info.gpio_conf->cam_gpio_req_tbl);
-	kfree(s_ctrl->sensordata->power_info.gpio_conf->cam_gpio_set_tbl);
 	kfree(s_ctrl->sensordata->power_info.gpio_conf);
 	kfree(s_ctrl->sensordata->power_info.cam_vreg);
 	kfree(s_ctrl->sensordata->power_info.power_setting);
@@ -269,7 +286,7 @@ int msm_sensor_match_id(struct msm_sensor_ctrl_t *s_ctrl)
 		return rc;
 	}
 
-	pr_debug("%s: read id: 0x%x expected id 0x%x:\n",
+	pr_err("%s: read id: 0x%x expected id 0x%x:\n",
 			__func__, chipid, slave_info->sensor_id);
 	if (msm_sensor_id_by_mask(s_ctrl, chipid) != slave_info->sensor_id) {
 		pr_err("%s chip id %x does not match %x\n",
@@ -315,7 +332,71 @@ static void msm_sensor_stop_stream(struct msm_sensor_ctrl_t *s_ctrl)
 	mutex_unlock(s_ctrl->msm_sensor_mutex);
 	return;
 }
+//, add,start
+static void fih_msm_sensor_restart_stream(struct msm_sensor_ctrl_t *s_ctrl)
+{
+	int rc=0;
+	const char *sensor_name;
+	struct msm_camera_i2c_reg_setting conf_array;
+	struct msm_camera_i2c_reg_array *sensor_setting=NULL;
+	int size=0;
 
+	mutex_lock(s_ctrl->msm_sensor_mutex);
+	if (s_ctrl->sensor_state == MSM_SENSOR_POWER_UP)
+	{
+		sensor_name=s_ctrl->sensordata->sensor_name;
+		if(strncmp(sensor_name, "s5k3p3_ple_truly", strlen("s5k3p3_ple_truly"))==0)
+		{
+			sensor_setting = s5k3p3_ple_recover;
+			size = sizeof(s5k3p3_ple_recover)/sizeof(struct msm_camera_i2c_reg_array);
+		}
+		else if(strncmp(sensor_name, "s5k4h8_kingcome", strlen("s5k4h8_kingcome"))==0)
+		{
+			sensor_setting = s5k4h8_ple_recover;
+			size = sizeof(s5k4h8_ple_recover)/sizeof(struct msm_camera_i2c_reg_array);
+		}
+		else if(strncmp(sensor_name, "s5k3p3", strlen("s5k3p3"))==0)
+		{
+			sensor_setting = s5k3p3_recover;
+			size = sizeof(s5k3p3_recover)/sizeof(struct msm_camera_i2c_reg_array);
+		}
+		else if(strncmp(sensor_name, "s5k4h8", strlen("s5k4h8"))==0)
+		{
+			sensor_setting = s5k4h8_recover;
+			size = sizeof(s5k4h8_recover)/sizeof(struct msm_camera_i2c_reg_array);
+		}
+		else
+			goto END;
+
+		pr_err("%s:%d sensor name:%s recover start\n",__func__,__LINE__,sensor_name);
+		//power down/power up
+		rc = s_ctrl->func_tbl->sensor_power_down(s_ctrl);
+		if (rc < 0) {
+			pr_err("%s:%d failed rc %d\n", __func__,__LINE__, rc);
+			goto END;
+		}
+		rc = s_ctrl->func_tbl->sensor_power_up(s_ctrl);
+		if (rc < 0) {
+			pr_err("%s:%d failed rc %d\n", __func__,__LINE__, rc);
+			goto END;
+		}
+
+		//new sensor setting
+		conf_array.addr_type = s_ctrl->stop_setting.addr_type;
+		conf_array.data_type = s_ctrl->stop_setting.data_type;
+		conf_array.delay = s_ctrl->stop_setting.delay;
+		conf_array.size = size;
+		conf_array.reg_setting = sensor_setting;
+
+		//reset sensor setting
+		s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_write_table(s_ctrl->sensor_i2c_client, &conf_array);
+		pr_err("%s:%d sensor recover done\n",__func__,__LINE__);
+	}
+END:
+	mutex_unlock(s_ctrl->msm_sensor_mutex);
+	return;
+}
+//, add,end
 static int msm_sensor_get_af_status(struct msm_sensor_ctrl_t *s_ctrl,
 			void __user *argp)
 {
@@ -351,6 +432,7 @@ static long msm_sensor_subdev_ioctl(struct v4l2_subdev *sd,
 		msm_sensor_stop_stream(s_ctrl);
 		return 0;
 	case MSM_SD_NOTIFY_FREEZE:
+		fih_msm_sensor_restart_stream(s_ctrl);//, add
 		return 0;
 	case MSM_SD_UNNOTIFY_FREEZE:
 		return 0;
@@ -770,10 +852,30 @@ static int msm_sensor_config32(struct msm_sensor_ctrl_t *s_ctrl,
 			if (s_ctrl->sensordata->misc_regulator)
 				msm_sensor_misc_regulator(s_ctrl, 1);
 
+			//SW4-RL-Camera BBS log-00+{_20170216
+			sensorName = s_ctrl->sensordata->sensor_name;
+
+			if(s_ctrl->sensordata->actuator_name!=NULL && ((int)strlen(s_ctrl->sensordata->actuator_name)>1)){
+				actuatorName = s_ctrl->sensordata->actuator_name;
+				//pr_err("%s:%d actuatorName = %s\n", __func__, __LINE__, actuatorName);
+			}
+
+			pos = s_ctrl->sensordata->sensor_info->position;
+			//SW4-RL-Camera BBS log-00+}_20170216
+
+			//SW4-RL-Camera BBS log-00+_20170216
+			//fih_bbs_camera_msg_by_soensor_info(s_ctrl->sensor_i2c_client->cci_client->sid,
+			//    s_ctrl->sensordata->sensor_name, s_ctrl->sensordata->sensor_info->position, NULL, FIH_BBS_CAMERA_ERRORCODE_POWER_UP);
+
 			rc = s_ctrl->func_tbl->sensor_power_up(s_ctrl);
 			if (rc < 0) {
 				pr_err("%s:%d failed rc %d\n", __func__,
 					__LINE__, rc);
+				//, add BBS log
+				//fih_bbs_camera_msg_by_addr(s_ctrl->sensor_i2c_client->cci_client->sid, FIH_BBS_CAMERA_ERRORCODE_POWER_UP);
+				//SW4-RL-Camera BBS log-00+_20170216
+				fih_bbs_camera_msg_by_soensor_info(s_ctrl->sensor_i2c_client->cci_client->sid,
+				    s_ctrl->sensordata->sensor_name, s_ctrl->sensordata->sensor_info->position, NULL, FIH_BBS_CAMERA_ERRORCODE_POWER_UP);
 				break;
 			}
 			s_ctrl->sensor_state = MSM_SENSOR_POWER_UP;
@@ -799,10 +901,24 @@ static int msm_sensor_config32(struct msm_sensor_ctrl_t *s_ctrl,
 			if (s_ctrl->sensordata->misc_regulator)
 				msm_sensor_misc_regulator(s_ctrl, 0);
 
+			//SW4-RL-Camera BBS log-00+{_20170216
+			sensorName = s_ctrl->sensordata->sensor_name;
+			pos = s_ctrl->sensordata->sensor_info->position;
+			//SW4-RL-Camera BBS log-00+}_20170216
+
+			//SW4-RL-Camera BBS log-00+_20170216
+			//fih_bbs_camera_msg_by_soensor_info(s_ctrl->sensor_i2c_client->cci_client->sid,
+			//	 s_ctrl->sensordata->sensor_name, s_ctrl->sensordata->sensor_info->position, NULL, FIH_BBS_CAMERA_ERRORCODE_POWER_DW);
+
 			rc = s_ctrl->func_tbl->sensor_power_down(s_ctrl);
 			if (rc < 0) {
 				pr_err("%s:%d failed rc %d\n", __func__,
 					__LINE__, rc);
+				//, add BBS log
+				//fih_bbs_camera_msg_by_addr(s_ctrl->sensor_i2c_client->cci_client->sid, FIH_BBS_CAMERA_ERRORCODE_POWER_DW);
+				//SW4-RL-Camera BBS log-00+_20170216
+				fih_bbs_camera_msg_by_soensor_info(s_ctrl->sensor_i2c_client->cci_client->sid,
+				  s_ctrl->sensordata->sensor_name, s_ctrl->sensordata->sensor_info->position, NULL, FIH_BBS_CAMERA_ERRORCODE_POWER_DW);
 				break;
 			}
 			s_ctrl->sensor_state = MSM_SENSOR_POWER_DOWN;

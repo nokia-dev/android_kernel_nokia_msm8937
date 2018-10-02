@@ -140,6 +140,36 @@
 			};
 		};
 
+		i2c_6 {
+			i2c_6_active: i2c_6_active {
+				/* active state */
+				mux {
+					pins = "gpio22", "gpio23";
+					function = "blsp_i2c6";
+				};
+
+				config {
+					pins = "gpio22", "gpio23";
+					drive-strength = <2>;
+					bias-disable;
+				};
+			};
+
+			i2c_6_sleep: i2c_6_sleep {
+				/* suspended state */
+				mux {
+					pins = "gpio22", "gpio23";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio22", "gpio23";
+					drive-strength = <2>;
+					bias-pull-down;
+				};
+			};
+		};
+
 		pmx_rd_nfc_int {
 			/*qcom,pins = <&gp 17>;*/
 			pins = "gpio17";
@@ -595,6 +625,71 @@
 				};
 			};
 		};
+/*Win add for finger print start*/
+		pmx_fp_int_active {
+			fp_int_active: fp_int_active {
+				mux {
+					pins = "gpio48";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio48";
+					drive-strength = <2>;
+					bias-disable;
+					input-enable;
+				};
+			};
+		};
+
+		pmx_fp_reset_active {
+			fp_reset_active: fp_reset_active {
+				mux {
+					pins = "gpio89";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio89";
+					drive-strength = <2>;
+					bias-disable;
+					output-high;
+				};
+			};
+		};
+
+		pmx_fp_id_active {
+			fp_id_active: fp_id_active {
+				mux {
+					pins = "gpio90";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio90";
+					drive-strength = <2>;
+					bias-disable;
+					input-enable;
+				};
+			};
+		};
+
+		pmx_fp_reset_suspend {
+			fp_reset_suspend: fp_reset_suspend {
+				mux {
+					pins = "gpio89";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio89";
+					drive-strength = <2>;
+					bias-disable;
+					output-low;
+				};
+			};
+		};
+/*Win add for finger print end*/
 
 		pmx_qdsd_clk {
 			qdsd_clk_sdcard: clk_sdcard {
@@ -1519,6 +1614,16 @@
 				pins = "gpio40", "gpio39";
 				bias-disable; /* No PULL */
 				drive-strength = <2>; /* 2 MA */
+			};
+		};
+
+		gpio_led_pins {
+			pins = "gpio0", "gpio1", "gpio2";
+			qcom,num-grp-pins = <3>;
+			label = "gpio-led-pins";
+			gpio_led_off: led_off {
+				drive-strength = <2>;
+				bias-disable;
 			};
 		};
 	};

@@ -1,0 +1,11 @@
+&soc {
+    ir: ir-receiver {
+        compatible = "nochip,irled";
+        clocks = <&clock_gcc clk_gcc_camss_gp0_clk>;
+        clock-names = "gcc_camss_gp0_clk";
+        #clock-cells = <1>;
+        pinctrl-names = "gpioir_clk_default","gpioir_clk_sleep";
+        pinctrl-0 = <&gpioir_clk_default>;
+        pinctrl-1 = <&gpioir_clk_sleep>;
+    };
+};

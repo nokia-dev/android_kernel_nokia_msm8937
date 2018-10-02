@@ -177,6 +177,11 @@
 		(hap->init_drive_period_code = (hap->init_drive_period_code * \
 					(1000 - rc_clk_err_percent_x10)) / 1000)
 
+#define BBOX_HAPTIC_PROBE_FAIL do {printk("BBox::UEC;19::0\n");} while (0);
+#define BBOX_HAPTIC_SET_FAIL do {printk("BBox::UEC;19::2\n");} while (0);
+#define BBOX_HAPTIC_WRITE_REGISTER_FAIL do {printk("BBox::UEC;19::7\n");} while (0);
+#define BBOX_HAPTIC_ENABLE_FAIL do {printk("BBox::UEC;19::3\n");} while (0);
+
 u32 adjusted_lra_play_rate_code[ADJUSTED_LRA_PLAY_RATE_CODE_ARRSIZE];
 
 /* haptic debug register set */
@@ -419,8 +424,11 @@ static int qpnp_hap_write_reg(struct qpnp_hap *hap, u8 *data, u16 addr)
 	rc = spmi_ext_register_writel(hap->spmi->ctrl, hap->spmi->sid,
 							addr, data, 1);
 	if (rc < 0)
+	{
+		BBOX_HAPTIC_WRITE_REGISTER_FAIL
 		dev_err(&hap->spmi->dev,
 			"Error writing address: %X - ret %X\n", addr, rc);
+	}
 
 	dev_dbg(&hap->spmi->dev, "write: HAP_0x%x = 0x%x\n", addr, *data);
 	return rc;
@@ -624,6 +632,7 @@ static irqreturn_t qpnp_hap_sc_irq(int irq, void *_hap)
 					QPNP_HAP_EN_CTL_REG(hap->base));
 		dev_err(&hap->spmi->dev,
 			"Haptics disabled permanently due to short circuit\n");
+			BBOX_HAPTIC_ENABLE_FAIL
 	}
 
 	return IRQ_HANDLED;
@@ -1625,7 +1634,10 @@ static int qpnp_hap_set(struct qpnp_hap *hap, int on)
 
 			rc = qpnp_hap_mod_enable(hap, on);
 			if (rc < 0)
+			{
+				BBOX_HAPTIC_SET_FAIL
 				return rc;
+			}
 
 			rc = qpnp_hap_play(hap, on);
 
@@ -1636,7 +1648,10 @@ static int qpnp_hap_set(struct qpnp_hap *hap, int on)
 							back_emf_delay_us + 1);
 				rc = qpnp_hap_auto_res_enable(hap, 1);
 				if (rc < 0)
+				{
+					BBOX_HAPTIC_SET_FAIL
 					return rc;
+				}
 			}
 			if (hap->act_type == QPNP_HAP_LRA &&
 					hap->correct_lra_drive_freq &&
@@ -1654,7 +1669,10 @@ static int qpnp_hap_set(struct qpnp_hap *hap, int on)
 		} else {
 			rc = qpnp_hap_play(hap, on);
 			if (rc < 0)
+			{
+				BBOX_HAPTIC_SET_FAIL
 				return rc;
+			}
 
 			if (hap->act_type == QPNP_HAP_LRA &&
 				hap->correct_lra_drive_freq &&
@@ -1775,8 +1793,11 @@ static void qpnp_hap_worker(struct work_struct *work)
 	if (hap->vcc_pon && hap->state && !hap->vcc_pon_enabled) {
 		rc = regulator_enable(hap->vcc_pon);
 		if (rc < 0)
+    {
+      BBOX_HAPTIC_SET_FAIL
 			pr_err("%s: could not enable vcc_pon regulator rc=%d\n",
 				 __func__, rc);
+    }
 		else
 			hap->vcc_pon_enabled = true;
 	}
@@ -1796,8 +1817,11 @@ static void qpnp_hap_worker(struct work_struct *work)
 	if (hap->vcc_pon && !hap->state && hap->vcc_pon_enabled) {
 		rc = regulator_disable(hap->vcc_pon);
 		if (rc)
+    {
+      BBOX_HAPTIC_SET_FAIL
 			pr_err("%s: could not disable vcc_pon regulator rc=%d\n",
 				 __func__, rc);
+    }
 		else
 			hap->vcc_pon_enabled = false;
 	}
@@ -2527,13 +2551,17 @@ static int qpnp_haptic_probe(struct spmi_device *spmi)
 
 	hap = devm_kzalloc(&spmi->dev, sizeof(*hap), GFP_KERNEL);
 	if (!hap)
+	{
+		BBOX_HAPTIC_PROBE_FAIL
 		return -ENOMEM;
+	}
 
 	hap->spmi = spmi;
 
 	hap_resource = spmi_get_resource(spmi, 0, IORESOURCE_MEM, 0);
 	if (!hap_resource) {
 		dev_err(&spmi->dev, "Unable to get haptic base address\n");
+		BBOX_HAPTIC_PROBE_FAIL
 		return -EINVAL;
 	}
 	hap->base = hap_resource->start;
@@ -2549,12 +2577,14 @@ static int qpnp_haptic_probe(struct spmi_device *spmi)
 	rc = qpnp_hap_parse_dt(hap);
 	if (rc) {
 		dev_err(&spmi->dev, "DT parsing failed\n");
+		BBOX_HAPTIC_PROBE_FAIL
 		return rc;
 	}
 
 	rc = qpnp_hap_config(hap);
 	if (rc) {
 		dev_err(&spmi->dev, "hap config failed\n");
+		BBOX_HAPTIC_PROBE_FAIL
 		return rc;
 	}
 
@@ -2584,6 +2614,7 @@ static int qpnp_haptic_probe(struct spmi_device *spmi)
 	rc = timed_output_dev_register(&hap->timed_dev);
 	if (rc < 0) {
 		dev_err(&spmi->dev, "timed_output registration failed\n");
+		BBOX_HAPTIC_PROBE_FAIL
 		goto timed_output_fail;
 	}
 
@@ -2592,6 +2623,7 @@ static int qpnp_haptic_probe(struct spmi_device *spmi)
 				&qpnp_hap_attrs[i].attr);
 		if (rc < 0) {
 			dev_err(&spmi->dev, "sysfs creation failed\n");
+			BBOX_HAPTIC_PROBE_FAIL
 			goto sysfs_fail;
 		}
 	}
@@ -2602,6 +2634,7 @@ static int qpnp_haptic_probe(struct spmi_device *spmi)
 			rc = PTR_ERR(vcc_pon);
 			dev_err(&spmi->dev,
 				"regulator get failed vcc_pon rc=%d\n", rc);
+			BBOX_HAPTIC_PROBE_FAIL
 			goto sysfs_fail;
 		}
 		hap->vcc_pon = vcc_pon;

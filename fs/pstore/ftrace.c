@@ -54,7 +54,7 @@ static struct ftrace_ops pstore_ftrace_ops __read_mostly = {
 };
 
 static DEFINE_MUTEX(pstore_ftrace_lock);
-static bool pstore_ftrace_enabled;
+static bool pstore_ftrace_enabled = 1;  /*  for pstore */
 
 static ssize_t pstore_ftrace_knob_write(struct file *f, const char __user *buf,
 					size_t count, loff_t *ppos)

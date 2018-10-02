@@ -52,10 +52,6 @@
 		enable-active-high;
 		regulator-always-on;
 	};
-
-	pps {
-		use-system-time-ts;
-	};
 };
 
 &cnss_pcie {

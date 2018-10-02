@@ -230,11 +230,15 @@ static int verity_handle_err(struct dm_verity *v, enum verity_block_type type,
 	kobject_uevent_env(&disk_to_dev(dm_disk(md))->kobj, KOBJ_CHANGE, envp);
 
 out:
-	if (v->mode == DM_VERITY_MODE_LOGGING)
+	if (v->mode == DM_VERITY_MODE_LOGGING) {
+        printk("BBox::UPD;86::Enter Logging Mode\n");
 		return 0;
+    }
 
-	if (v->mode == DM_VERITY_MODE_RESTART)
+	if (v->mode == DM_VERITY_MODE_RESTART) {
+        printk("BBox::UPD;86::DM System Not Match\n");
 		kernel_restart("dm-verity device corrupted");
+    }
 
 	return 1;
 }

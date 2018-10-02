@@ -7,12 +7,12 @@
 
 static int version_proc_show(struct seq_file *m, void *v)
 {
-	seq_printf(m, linux_proc_banner,
-		utsname()->sysname,
-		utsname()->release,
-		utsname()->version);
-	return 0;
-}
+		seq_printf(m, linux_proc_banner,
+			utsname()->sysname,
+			utsname()->release,
+			utsname()->version);
+		return 0;
+	}
 
 static int version_proc_open(struct inode *inode, struct file *file)
 {

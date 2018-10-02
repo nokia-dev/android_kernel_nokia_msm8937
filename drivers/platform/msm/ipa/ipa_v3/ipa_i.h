@@ -65,9 +65,6 @@
 
 #define IPA_IPC_LOG_PAGES 50
 
-#define IPA_PM_THRESHOLD_MAX 2
-#define IPA_MAX_NUM_REQ_CACHE 10
-
 #define IPADBG(fmt, args...) \
 	do { \
 		pr_debug(DRV_NAME " %s:%d " fmt, __func__, __LINE__, ## args);\
@@ -613,7 +610,6 @@ struct ipa3_ep_context {
 	u32 uc_offload_state;
 	bool disconnect_in_progress;
 	u32 qmi_request_sent;
-	bool ep_delay_set;
 
 	/* sys MUST be the last element of this struct */
 	struct ipa3_sys_context *sys;
@@ -1107,11 +1103,6 @@ struct ipa_dma_task_info {
 	struct ipahal_imm_cmd_pyld *cmd_pyld;
 };
 
-struct ipa_cne_evt {
-	struct ipa_wan_msg wan_msg;
-	struct ipa_msg_meta msg_meta;
-};
-
 /**
  * struct ipa3_context - IPA context
  * @class: pointer to the struct class
@@ -1339,9 +1330,6 @@ struct ipa3_context {
 	u32 ipa_tz_unlock_reg_num;
 	struct ipa_tz_unlock_reg_info *ipa_tz_unlock_reg;
 	struct ipa_dma_task_info dma_task_info;
-	struct ipa_cne_evt ipa_cne_evt_req_cache[IPA_MAX_NUM_REQ_CACHE];
-	int num_ipa_cne_evt_req;
-	struct mutex ipa_cne_evt_lock;
 };
 
 /**
@@ -1372,7 +1360,6 @@ struct ipa3_plat_drv_res {
 	bool ipa_bam_remote_mode;
 	bool modem_cfg_emb_pipe_flt;
 	bool ipa_wdi2;
-	u32 default_threshold[IPA_PM_THRESHOLD_MAX];
 	bool use_64_bit_dma_mask;
 	u32 wan_rx_ring_size;
 	u32 lan_rx_ring_size;
@@ -1521,8 +1508,6 @@ int ipa3_xdci_start(u32 clnt_hdl, u8 xferrscidx, bool xferrscidx_valid);
 int ipa3_xdci_connect(u32 clnt_hdl);
 
 int ipa3_xdci_disconnect(u32 clnt_hdl, bool should_force_clear, u32 qmi_req_id);
-
-void ipa3_xdci_ep_delay_rm(u32 clnt_hdl);
 
 int ipa3_xdci_suspend(u32 ul_clnt_hdl, u32 dl_clnt_hdl,
 	bool should_force_clear, u32 qmi_req_id, bool is_dpl);

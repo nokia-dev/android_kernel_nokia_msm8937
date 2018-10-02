@@ -484,7 +484,6 @@ void diagfwd_peripheral_exit(void)
 	uint8_t peripheral;
 	uint8_t type;
 	struct diagfwd_info *fwd_info = NULL;
-	int transport = 0;
 
 	diag_smd_exit();
 	diag_socket_exit();
@@ -507,10 +506,7 @@ void diagfwd_peripheral_exit(void)
 		driver->diagfwd_dci_cmd[peripheral] = NULL;
 	}
 
-	for (transport = 0; transport < NUM_TRANSPORT; transport++) {
-		kfree(early_init_info[transport]);
-		early_init_info[transport] = NULL;
-	}
+	kfree(early_init_info);
 }
 
 int diagfwd_cntl_register(uint8_t transport, uint8_t peripheral, void *ctxt,
@@ -938,6 +934,12 @@ void diagfwd_channel_read(struct diagfwd_info *fwd_info)
 		if (read_buf) {
 			temp_buf = fwd_info->buf_2;
 			atomic_set(&temp_buf->in_busy, 1);
+		}
+		if (read_buf) {
+			temp_buf = fwd_info->buf_2;
+			atomic_set(&temp_buf->in_busy, 1);
+	                DIAG_LOG(DIAG_DEBUG_PERIPHERALS,"diag:%s:%d:p=%d,t=%d : buf_2->in_busy= %d\n",
+                                __func__, __LINE__,fwd_info->peripheral, fwd_info->type, atomic_read(&(fwd_info->buf_2->in_busy)));
 		}
 	} else {
 		pr_debug("diag: In %s, both buffers are empty for p: %d, t: %d\n",

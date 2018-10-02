@@ -66,7 +66,15 @@ struct aw2013_led {
 
 static int aw2013_write(struct aw2013_led *led, u8 reg, u8 val)
 {
-	return i2c_smbus_write_byte_data(led->client, reg, val);
+	s32 ret;
+
+	ret = i2c_smbus_write_byte_data(led->client, reg, val);
+	if (ret < 0){
+		printk("BBox::UEC;23::3\n");
+		return ret;
+	}
+
+	return 0;
 }
 
 static int aw2013_read(struct aw2013_led *led, u8 reg, u8 *val)
@@ -74,8 +82,10 @@ static int aw2013_read(struct aw2013_led *led, u8 reg, u8 *val)
 	s32 ret;
 
 	ret = i2c_smbus_read_byte_data(led->client, reg);
-	if (ret < 0)
+	if (ret < 0){
+		printk("BBox::UEC;23::2\n");
 		return ret;
+	}
 
 	*val = ret;
 	return 0;
@@ -211,6 +221,7 @@ static void aw2013_brightness_work(struct work_struct *work)
 	if (!led->pdata->led->poweron) {
 		if (aw2013_power_on(led->pdata->led, true)) {
 			dev_err(&led->pdata->led->client->dev, "power on failed");
+			printk("BBox::UEC;23::1\n");
 			mutex_unlock(&led->pdata->led->lock);
 			return;
 		}
@@ -238,12 +249,18 @@ static void aw2013_brightness_work(struct work_struct *work)
 	 * all off. So we need to power it off.
 	 */
 	if (val == 0) {
-		if (aw2013_power_on(led->pdata->led, false)) {
-			dev_err(&led->pdata->led->client->dev,
-				"power off failed");
-			mutex_unlock(&led->pdata->led->lock);
-			return;
+		if(strstr(saved_command_line, "androidboot.mode=2") == NULL) { //Not FTM Mode
+			if (aw2013_power_on(led->pdata->led, false)) {
+				dev_err(&led->pdata->led->client->dev,
+					"power off failed");
+				printk("BBox::UEC;23::1\n");
+				mutex_unlock(&led->pdata->led->lock);
+				return;
+			}
+			dev_info(&led->pdata->led->client->dev, "Led turn off success, val=0x%x\n", val);
 		}
+	}else{
+		dev_info(&led->pdata->led->client->dev, "Led turn on success, val=0x%x\n", val);
 	}
 
 	mutex_unlock(&led->pdata->led->lock);
@@ -257,6 +274,7 @@ static void aw2013_led_blink_set(struct aw2013_led *led, unsigned long blinking)
 	if (!led->pdata->led->poweron) {
 		if (aw2013_power_on(led->pdata->led, true)) {
 			dev_err(&led->pdata->led->client->dev, "power on failed");
+			printk("BBox::UEC;23::1\n");
 			return;
 		}
 	}
@@ -293,6 +311,7 @@ static void aw2013_led_blink_set(struct aw2013_led *led, unsigned long blinking)
 		if (aw2013_power_on(led->pdata->led, false)) {
 			dev_err(&led->pdata->led->client->dev,
 				"power off failed");
+			printk("BBox::UEC;23::1\n");
 			return;
 		}
 	}
@@ -302,6 +321,7 @@ static void aw2013_set_brightness(struct led_classdev *cdev,
 			     enum led_brightness brightness)
 {
 	struct aw2013_led *led = container_of(cdev, struct aw2013_led, cdev);
+	dev_info(&led->client->dev, "led->id= %d, aw2013_set_brightness = %d\n", led->id, brightness);
 
 	led->cdev.brightness = brightness;
 
@@ -385,7 +405,7 @@ static int aw_2013_check_chipid(struct aw2013_led *led)
 	u8 val;
 
 	aw2013_write(led, AW_REG_RESET, AW_LED_RESET_MASK);
-	usleep(AW_LED_RESET_DELAY);
+	usleep_range(AW_LED_RESET_DELAY, 10);
 	aw2013_read(led, AW_REG_RESET, &val);
 	if (val == AW2013_CHIPID)
 		return 0;
@@ -451,15 +471,19 @@ static int aw2013_led_parse_child_node(struct aw2013_led *led_array,
 			goto free_pdata;
 		}
 
-		rc = of_property_read_u32(temp, "aw2013,max-brightness",
-			&led->cdev.max_brightness);
-		if (rc < 0) {
-			dev_err(&led->client->dev,
-				"Failure reading max-brightness, rc = %d\n",
-				rc);
-			goto free_pdata;
+//SW-PRODUCTION-JH-FTM use max brightness+[
+		led->cdev.max_brightness = 255;
+		if(strstr(saved_command_line, "androidboot.mode=2") == NULL) { //Not FTM Mode
+			rc = of_property_read_u32(temp, "aw2013,max-brightness",
+				&led->cdev.max_brightness);
+			if (rc < 0) {
+				dev_err(&led->client->dev,
+					"Failure reading max-brightness, rc = %d\n",
+					rc);
+				goto free_pdata;
+			}
 		}
-
+//SW-PRODUCTION-JH-FTM use max brightness+]
 		rc = of_property_read_u32(temp, "aw2013,max-current",
 			&led->pdata->max_current);
 		if (rc < 0) {
@@ -499,6 +523,20 @@ static int aw2013_led_parse_child_node(struct aw2013_led *led_array,
 				"Failure reading off-time-ms, rc = %d\n", rc);
 			goto free_pdata;
 		}
+
+//SW-PRODUCTION-JH-Add default trigger+[
+		led->cdev.default_trigger = "none";
+		if(strstr(saved_command_line, "androidboot.mode=2") == NULL) { //Not FTM Mode
+			rc = of_property_read_string(temp, "linux,default-trigger",
+				&led->cdev.default_trigger);
+			if (rc < 0) {
+				dev_err(&led->client->dev,
+					"Failure reading led default-trigger, rc = %d\n", rc);
+				goto free_pdata;
+			}
+		}
+		dev_info(&led->client->dev,"led->cdev.default_trigger=%s\n", led->cdev.default_trigger);
+//SW-PRODUCTION-JH-Add default trigger+]
 
 		INIT_WORK(&led->brightness_work, aw2013_brightness_work);
 
@@ -567,6 +605,19 @@ static int aw2013_led_probe(struct i2c_client *client,
 
 	mutex_init(&led_array->lock);
 
+//SW-PRODUCTION-JH-Register rw fail+[
+	ret = aw2013_power_init(led_array, true);
+	if (ret) {
+		dev_err(&client->dev, "power init failed");
+		goto fail_parsed_node;
+	}
+	/* enable regulators if they are disabled */
+	if (aw2013_power_on(led_array, true)) {
+		dev_err(&client->dev, "power on failed");
+		goto fail_parsed_node;
+	}
+//SW-PRODUCTION-JH-Register rw fail+]
+
 	ret = aw_2013_check_chipid(led_array);
 	if (ret) {
 		dev_err(&client->dev, "Check chip id error\n");
@@ -581,12 +632,16 @@ static int aw2013_led_probe(struct i2c_client *client,
 
 	i2c_set_clientdata(client, led_array);
 
+//SW-PRODUCTION-JH-Register rw fail-[
+#if 0
 	ret = aw2013_power_init(led_array, true);
 	if (ret) {
 		dev_err(&client->dev, "power init failed");
 		goto fail_parsed_node;
 	}
-
+#endif
+//SW-PRODUCTION-JH-Register rw fail-]
+	dev_err(&client->dev, "aw2013 probe success\n");
 	return 0;
 
 fail_parsed_node:
@@ -595,6 +650,7 @@ free_led_arry:
 	mutex_destroy(&led_array->lock);
 	devm_kfree(&client->dev, led_array);
 	led_array = NULL;
+	printk("BBox::UEC;23::0\n");
 	return ret;
 }
 

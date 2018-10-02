@@ -121,6 +121,7 @@ enum msm_usb_phy_type {
 };
 
 #define IDEV_CHG_MAX	1500
+#define IDEV_CHG_FLOATED	500
 #define IUNIT		100
 #define IDEV_HVDCP_CHG_MAX	1800
 
@@ -160,6 +161,7 @@ enum usb_chg_state {
  *                      IDEV_CHG_MAX can be drawn irrespective of USB state.
  * USB_PROPRIETARY_CHARGER A proprietary charger pull DP and DM to specific
  *			voltages between 2.0-3.3v for identification.
+ * USB_UNSUPPORTED_CHARGER Unsupported Floated charger.
  *
  */
 enum usb_chg_type {
@@ -168,7 +170,7 @@ enum usb_chg_type {
 	USB_DCP_CHARGER,
 	USB_CDP_CHARGER,
 	USB_PROPRIETARY_CHARGER,
-	USB_FLOATED_CHARGER,
+	USB_UNSUPPORTED_CHARGER, //   for floated charger
 };
 
 /**
@@ -222,6 +224,23 @@ enum usb_id_state {
 	USB_ID_GROUND = 0,
 	USB_ID_FLOAT,
 };
+
+//   for floated charger {{
+/**
+ * Used for different states involved in Floating charger detection.
+ *
+ * FLOATING_AS_SDP		This is used to detect floating charger as SDP
+ * FLOATING_AS_DCP		This is used to detect floating charger as DCP
+ * FLOATING_AS_INVALID		This is used to detect floating charger is not
+ *				supported and detects as INVALID
+ *
+ */
+enum floated_chg_type {
+	FLOATING_AS_SDP = 0,
+	FLOATING_AS_DCP,
+	FLOATING_AS_INVALID,
+};
+//   for floated charger }}
 
 /**
  * struct msm_otg_platform_data - platform device data
@@ -286,6 +305,7 @@ enum usb_id_state {
  * @bool enable_sdp_typec_current_limit: Indicates whether type-c current for
 		sdp charger to be limited.
  * @usbeth_reset_gpio: Gpio used for external usb-to-eth reset.
+ * @enable_floated_charger: Indicates floated charger type (SDP/DCP/INVALID).
  */
 struct msm_otg_platform_data {
 	int *phy_init_seq;
@@ -330,6 +350,7 @@ struct msm_otg_platform_data {
 	bool enable_axi_prefetch;
 	bool enable_sdp_typec_current_limit;
 	bool vbus_low_as_hostmode;
+  enum floated_chg_type enable_floated_charger; //  for floated charger
 };
 
 /* phy related flags */
@@ -401,6 +422,8 @@ struct msm_otg_platform_data {
  * @typec_current_max: Max charging current allowed as per type-c chg detection
  * @is_ext_chg_dcp: To indicate whether charger detected by external entity
 		SMB hardware is DCP charger or not.
+ * @is_ext_chg_detected: To indicate whether charger detected by external entity
+		SMB hardware or not.
  * @ext_id_irq: IRQ for ID interrupt.
  * @phy_irq_pending: Gets set when PHY IRQ arrives in LPM.
  * @id_state: Indicates USBID line status.
@@ -540,6 +563,7 @@ struct msm_otg {
 	struct completion ext_chg_wait;
 	struct pinctrl *phy_pinctrl;
 	bool is_ext_chg_dcp;
+	bool is_ext_chg_detected; //   for floated charger
 	struct qpnp_vadc_chip	*vadc_dev;
 	int ext_id_irq;
 	bool phy_irq_pending;
@@ -558,6 +582,7 @@ struct msm_otg {
 	int pm_qos_latency;
 	struct pm_qos_request pm_qos_req_dma;
 	struct delayed_work perf_vote_work;
+	unsigned int chg_retry_count; //   for floated charger
 };
 
 struct ci13xxx_platform_data {

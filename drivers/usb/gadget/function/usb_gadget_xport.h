@@ -25,7 +25,6 @@ enum transport_type {
 	USB_GADGET_XPORT_HSUART,
 	USB_GADGET_XPORT_ETHER,
 	USB_GADGET_XPORT_CHAR_BRIDGE,
-	USB_GADGET_XPORT_GLINK,
 	USB_GADGET_XPORT_BAM_DMUX,
 	USB_GADGET_XPORT_PCIE,
 	USB_GADGET_XPORT_NONE,
@@ -54,8 +53,6 @@ static char *xport_to_str(enum transport_type t)
 		return "ETHER";
 	case USB_GADGET_XPORT_CHAR_BRIDGE:
 		return "CHAR_BRIDGE";
-	case USB_GADGET_XPORT_GLINK:
-		return "GLINK";
 	case USB_GADGET_XPORT_BAM_DMUX:
 		return "BAM_DMUX";
 	case USB_GADGET_XPORT_PCIE:
@@ -91,8 +88,6 @@ static enum transport_type str_to_xport(const char *name)
 		return USB_GADGET_XPORT_ETHER;
 	if (!strncasecmp("CHAR_BRIDGE", name, XPORT_STR_LEN))
 		return USB_GADGET_XPORT_CHAR_BRIDGE;
-	if (!strncasecmp("GLINK", name, XPORT_STR_LEN))
-		return USB_GADGET_XPORT_GLINK;
 	if (!strncasecmp("BAM_DMUX", name, XPORT_STR_LEN))
 		return USB_GADGET_XPORT_BAM_DMUX;
 	if (!strncasecmp("PCIE", name, XPORT_STR_LEN))

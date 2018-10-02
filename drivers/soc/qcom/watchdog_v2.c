@@ -30,6 +30,8 @@
 #include <soc/qcom/memory_dump.h>
 #include <soc/qcom/watchdog.h>
 
+#include "../../../drivers/fih/fih_rere.h"  /*to support fih apr */
+
 #define MODULE_NAME "msm_watchdog"
 #define WDT0_ACCSCSSNBARK_INT 0
 #define TCSR_WDT_CFG	0x30
@@ -406,6 +408,11 @@ static irqreturn_t wdog_bark_handler(int irq, void *dev_id)
 	struct msm_watchdog_data *wdog_dd = (struct msm_watchdog_data *)dev_id;
 	unsigned long nanosec_rem;
 	unsigned long long t = sched_clock();
+
+	/*to support fih apr { */
+	fih_rere_wt_imem(FIH_RERE_KERNEL_WDOG);
+	pr_info("%s: rere = 0x%08x\n", __func__, fih_rere_rd_imem());
+	/*to support fih apr } */
 
 	nanosec_rem = do_div(t, 1000000000);
 	printk(KERN_INFO "Watchdog bark! Now = %lu.%06lu\n", (unsigned long) t,

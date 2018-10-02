@@ -38,6 +38,19 @@
 #include <media/radio-iris.h>
 #include <asm/unaligned.h>
 
+#define BBSLOG
+#ifdef BBSLOG
+#define FM_PROBE_ERROR do {printk("BBox;%s: Power on failure\n", __func__); printk("BBox::UEC;15::0\n");} while(0)
+#define FM_HCI_ERROR do {printk("BBox;%s: HCI cmd transfer failure\n", __func__); printk("BBox::UEC;15::1\n");} while(0)
+#define FM_SET_LOW_POWER_MODE_ERROR do {printk("BBox;%s: Set low power mode failure\n", __func__); printk("BBox::UEC;15::2\n");} while(0)
+#define FM_SET_FREQUENCY_ERROR do {printk("BBox;%s: Set frequency failure\n", __func__); printk("BBox::UEC;15::3\n");} while(0)
+#define FM_DO_CALIBRATION_ERROR do {printk("BBox;%s: Do Calibration failure\n", __func__); printk("BBox::UEC;15::4\n");} while(0)
+#define FM_SEARCH_ERROR do {printk("BBox;%s: FM srch failure\n", __func__); printk("BBox::UEC;15::5\n");} while(0)
+#define FM_STATE_ERROR do {printk("BBox;%s: FM IRIS_STATE faliure\n", __func__); printk("BBox::UEC;15::6\n");} while(0)
+#define FM_RDS_ERROR do {printk("BBox;%s: FM RDS faliure\n", __func__); printk("BBox::UEC;15::7\n");} while(0)
+#define FM_ANTENNA_ERROR do {printk("BBox;%s: FM Antenna faliure\n", __func__); printk("BBox::UEC;15::8\n");} while(0)
+#endif
+
 static unsigned int rds_buf = 100;
 static int oda_agt;
 static int grp_mask;
@@ -3129,6 +3142,13 @@ static int iris_search(struct iris_device *radio, int on, int dir)
 			radio->srch_st_list.srch_list_mode = srch;
 			retval = hci_fm_search_station_list(
 				&radio->srch_st_list, radio->fm_hdev);
+			if(retval<0)
+				{
+				FMDERR("hci_fm_search_station_list error");
+#ifdef BBSLOG
+				FM_SEARCH_ERROR;
+#endif	
+				}
 			break;
 		case RDS_SEEK_PTY:
 		case RDS_SCAN_PTY:
@@ -3140,6 +3160,13 @@ static int iris_search(struct iris_device *radio, int on, int dir)
 				radio->g_scan_time;
 			retval = hci_fm_search_rds_stations(&radio->srch_rds,
 				radio->fm_hdev);
+			if(retval<0)
+				{
+				FMDERR("hci_fm_search_station_list error");
+#ifdef BBSLOG
+				FM_SEARCH_ERROR;
+#endif	
+				}
 			break;
 		default:
 			radio->srch_st.srch_mode = srch;
@@ -3147,6 +3174,13 @@ static int iris_search(struct iris_device *radio, int on, int dir)
 			radio->srch_st.srch_dir = dir;
 			retval = hci_fm_search_stations(
 				&radio->srch_st, radio->fm_hdev);
+			if(retval<0)
+				{
+				FMDERR("hci_fm_search_station_list error");
+#ifdef BBSLOG
+				FM_SEARCH_ERROR;
+#endif	
+				}
 			break;
 		}
 
@@ -3181,7 +3215,12 @@ static int set_low_power_mode(struct iris_device *radio, int power_mode)
 			grp_3a.rds_grp_enable_mask &= ~FM_RDS_3A_GRP;
 			retval = hci_fm_rds_grp(&grp_3a, radio->fm_hdev);
 			if (retval < 0)
+				{
 				FMDERR("error in disable 3A group mask\n");
+#ifdef BBSLOG
+				FM_SET_LOW_POWER_MODE_ERROR;
+#endif	
+				}
 			radio->event_mask = 0x00;
 			if (radio->af_jump_bit)
 				rds_grps_proc = 0x00 | AF_JUMP_ENABLE;
@@ -3201,7 +3240,12 @@ static int set_low_power_mode(struct iris_device *radio, int power_mode)
 			retval = hci_fm_rds_grp(&radio->rds_grp,
 							radio->fm_hdev);
 			if (retval < 0)
+				{
 				FMDERR("error in enable 3A group mask\n");
+#ifdef BBSLOG
+				FM_SET_LOW_POWER_MODE_ERROR;
+#endif	
+				}
 			radio->event_mask = SIG_LEVEL_INTR |
 					RDS_SYNC_INTR | AUDIO_CTRL_INTR;
 			retval = hci_conf_event_mask(&radio->event_mask,
@@ -3275,7 +3319,12 @@ static int iris_set_freq(struct iris_device *radio, unsigned int freq)
 	}
 	retval = hci_fm_tune_station(&freq, radio->fm_hdev);
 	if (retval < 0)
+		{
 		FMDERR("Error while setting the frequency : %d\n", retval);
+#ifdef BBSLOG
+				FM_SET_FREQUENCY_ERROR;
+#endif	
+		}
 	return retval;
 }
 
@@ -3319,6 +3368,9 @@ static int iris_do_calibration(struct iris_device *radio)
 	if (retval < 0) {
 		FMDERR("Enable failed before calibration %x", retval);
 		radio->mode = FM_OFF;
+#ifdef BBSLOG
+				FM_DO_CALIBRATION_ERROR;
+#endif	
 		return retval;
 	}
 	retval = radio_hci_request(radio->fm_hdev, hci_fm_do_cal_req,
@@ -3326,13 +3378,18 @@ static int iris_do_calibration(struct iris_device *radio)
 	if (retval < 0) {
 		FMDERR("Do Process calibration failed %x", retval);
 		radio->mode = FM_RECV;
+#ifdef BBSLOG
+				FM_DO_CALIBRATION_ERROR;
+#endif	
 		return retval;
 	}
 	retval = hci_cmd(HCI_FM_DISABLE_RECV_CMD,
 			radio->fm_hdev);
 	if (retval < 0)
 		FMDERR("Disable Failed after calibration %d", retval);
-
+#ifdef BBSLOG
+				FM_DO_CALIBRATION_ERROR;
+#endif	
 	return retval;
 }
 static int iris_vidioc_g_ctrl(struct file *file, void *priv,
@@ -4060,12 +4117,18 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 			if (radio->mode != FM_OFF) {
 				FMDERR("FM mode is not off %d\n", radio->mode);
 				retval = -EINVAL;
+#ifdef BBSLOG
+				FM_STATE_ERROR;
+#endif
 				goto END;
 			}
 			if (is_enable_rx_possible(radio) != 0) {
 				FMDERR("%s: fm is not in proper state\n",
 					 __func__);
 				retval = -EINVAL;
+#ifdef BBSLOG
+				FM_STATE_ERROR;
+#endif
 				goto END;
 			}
 			radio->mode = FM_RECV_TURNING_ON;
@@ -4074,6 +4137,9 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 			if (retval < 0) {
 				FMDERR("Enabling RECV FM fail %d\n", retval);
 				radio->mode = FM_OFF;
+#ifdef BBSLOG
+				FM_HCI_ERROR;
+#endif
 				goto END;
 			} else {
 				retval = initialise_recv(radio);
@@ -4083,6 +4149,9 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 					hci_cmd(HCI_FM_DISABLE_RECV_CMD,
 							radio->fm_hdev);
 					radio->mode = FM_OFF;
+#ifdef BBSLOG
+				FM_STATE_ERROR;
+#endif
 					goto END;
 				}
 			}
@@ -4102,6 +4171,9 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 			if (retval < 0) {
 				FMDERR("Enabling TRANS FM fail %d\n", retval);
 				radio->mode = FM_OFF;
+#ifdef BBSLOG
+				FM_HCI_ERROR;
+#endif
 				goto END;
 			} else {
 				retval = initialise_trans(radio);
@@ -4111,6 +4183,9 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 					hci_cmd(HCI_FM_DISABLE_TRANS_CMD,
 								radio->fm_hdev);
 					radio->mode = FM_OFF;
+#ifdef BBSLOG
+				FM_STATE_ERROR;
+#endif
 					goto END;
 				}
 			}
@@ -4130,6 +4205,9 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 					FMDERR("Err on disable recv FM");
 					FMDERR("%d\n", retval);
 					radio->mode = FM_RECV;
+#ifdef BBSLOG
+				FM_STATE_ERROR;
+#endif					
 					goto END;
 				}
 				break;
@@ -4142,6 +4220,9 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 					FMDERR("Err disabling trans FM");
 					FMDERR("%d\n", retval);
 					radio->mode = FM_TRANS;
+#ifdef BBSLOG
+				FM_STATE_ERROR;
+#endif	
 					goto END;
 				}
 				break;
@@ -4309,6 +4390,9 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 		if (!is_valid_rds_std(ctrl->value)) {
 			retval = -EINVAL;
 			FMDERR("%s: rds std is not valid\n", __func__);
+#ifdef BBSLOG
+				FM_RDS_ERROR;
+#endif	
 			goto END;
 		}
 		switch (radio->mode) {
@@ -4321,6 +4405,9 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 			if (retval < 0) {
 				FMDERR("Error in rds_std");
 				radio->recv_conf.rds_std = saved_val;
+#ifdef BBSLOG
+				FM_RDS_ERROR;
+#endif	
 				goto END;
 			}
 			break;
@@ -4333,6 +4420,9 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 			if (retval < 0) {
 				FMDERR("Error in rds_Std");
 				radio->trans_conf.rds_std = saved_val;
+#ifdef BBSLOG
+				FM_RDS_ERROR;
+#endif	
 				goto END;
 			}
 			break;
@@ -4404,12 +4494,18 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 		if (!is_valid_antenna(ctrl->value)) {
 			retval = -EINVAL;
 			FMDERR("%s: antenna type is not valid\n", __func__);
+#ifdef BBSLOG
+				FM_ANTENNA_ERROR;
+#endif	
 			goto END;
 		}
 		temp_val = ctrl->value;
 		retval = hci_fm_set_antenna(&temp_val, radio->fm_hdev);
 		if (retval < 0) {
 			FMDERR("Set Antenna failed retval = %x", retval);
+#ifdef BBSLOG
+				FM_ANTENNA_ERROR;
+#endif	
 			goto END;
 		}
 		radio->g_antenna =  ctrl->value;
@@ -5507,12 +5603,18 @@ static int iris_probe(struct platform_device *pdev)
 
 	if (!pdev) {
 		FMDERR(": pdev is null\n");
+#ifdef BBSLOG
+		FM_PROBE_ERROR;
+#endif
 		return -ENOMEM;
 	}
 
 	radio = kzalloc(sizeof(struct iris_device), GFP_KERNEL);
 	if (!radio) {
 		FMDERR(": Could not allocate radio device\n");
+#ifdef BBSLOG
+		FM_PROBE_ERROR;
+#endif
 		return -ENOMEM;
 	}
 
@@ -5523,6 +5625,9 @@ static int iris_probe(struct platform_device *pdev)
 	if (!radio->videodev) {
 		FMDERR(": Could not allocate V4L device\n");
 		kfree(radio);
+#ifdef BBSLOG
+		FM_PROBE_ERROR;
+#endif
 		return -ENOMEM;
 	}
 
@@ -5557,6 +5662,9 @@ static int iris_probe(struct platform_device *pdev)
 				kfifo_free(&radio->data_buf[i]);
 			video_device_release(radio->videodev);
 			kfree(radio);
+#ifdef BBSLOG
+			FM_PROBE_ERROR;
+#endif
 			return -ENOMEM;
 		}
 	}
@@ -5582,6 +5690,9 @@ static int iris_probe(struct platform_device *pdev)
 		for (; i > -1; i--)
 			kfifo_free(&radio->data_buf[i]);
 		kfree(radio);
+#ifdef BBSLOG
+		FM_PROBE_ERROR;
+#endif
 		return retval;
 	}
 	priv_videodev = kzalloc(sizeof(struct video_device),
@@ -5595,6 +5706,9 @@ static int iris_probe(struct platform_device *pdev)
 		for (; i > -1; i--)
 			kfifo_free(&radio->data_buf[i]);
 		kfree(radio);
+#ifdef BBSLOG
+			FM_PROBE_ERROR;
+#endif
 	}
 	return 0;
 }

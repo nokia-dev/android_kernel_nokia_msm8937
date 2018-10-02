@@ -1,0 +1,17 @@
+#
+# Sharp Touchscreen configuration
+#
+
+menu "SHTPS driver"
+
+comment "SHARP Touchscreen device drivers"
+
+config TOUCHSCREEN_SHTPS_DEV
+	bool "SHARP Touchscreens"
+	default n
+
+if TOUCHSCREEN_SHTPS_DEV
+	source "drivers/input/touchscreen/shtps/focaltech/Kconfig"
+endif # TOUCHSCREEN_SHTPS_DEV
+
+endmenu

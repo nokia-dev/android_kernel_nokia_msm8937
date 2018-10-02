@@ -273,6 +273,79 @@ static int mdss_fb_notify_update(struct msm_fb_data_type *mfd,
 	return ret;
 }
 
+// -  - MA3-589 - Apply SHARP backlight mapping rule {
+typedef struct { int x; int y; } coord_t;
+#define PANEL_TABLE_NUM     14
+#define TARGET_TABLE_NUM    10
+
+coord_t panel_lux_bl_map[PANEL_TABLE_NUM] =
+{
+    {0, 0},
+    {20, 474},
+    {40, 956},
+    {60, 1430},
+    {80, 1889},
+    {100, 2338},
+    {120, 2776},
+    {140, 3207},
+    {160, 3626},
+    {180, 4041},
+    {200, 4461},
+    {220, 4861},
+    {240, 5265},
+    {255, 5586}
+};
+
+coord_t target_lux_bl_map[TARGET_TABLE_NUM] =
+{
+    {1, 50},
+    {2, 50},
+    {3, 50},
+    {4, 77},
+    {10, 103},
+    {20, 150},
+    {60, 365},
+    {128,1100},
+    {200,2643},
+    {255,5000}
+};
+
+int fih_interp_to_target_level( coord_t* panel_t, coord_t* target_t, int x)
+{
+    int i;
+    int diffx;
+    int diffn;
+    int temp;
+
+    // Get Lux
+    for( i = 0; i < TARGET_TABLE_NUM-1; i++ )
+    {
+        if ( target_t[i].x <= x && target_t[i+1].x >= x )
+        {
+            diffx = x - target_t[i].x;
+            diffn = target_t[i+1].x - target_t[i].x;
+
+            temp= target_t[i].y + ( target_t[i+1].y - target_t[i].y ) * diffx / diffn;
+        }
+    }
+
+    // Get level
+    for( i = 0; i < PANEL_TABLE_NUM-1; i++ )
+    {
+        if ( panel_t[i].y <= temp && panel_t[i+1].y >= temp )
+        {
+            diffx = temp - panel_t[i].y;
+            diffn = panel_t[i+1].y - panel_t[i].y;
+            temp = panel_t[i].x + ( panel_t[i+1].x - panel_t[i].x ) * diffx / diffn;
+            pr_debug("[LCMDEBUG]%s: old level=%d, new level=%d", __func__, (int)x, (int)temp);
+            return temp;
+        }
+    }
+
+    return 0; // Not in Range
+}
+// -  - MA3-589 - Apply SHARP backlight mapping rule }
+
 static int lcd_backlight_registered;
 
 static void mdss_fb_set_bl_brightness(struct led_classdev *led_cdev,
@@ -285,6 +358,14 @@ static void mdss_fb_set_bl_brightness(struct led_classdev *led_cdev,
 		led_trigger_event(mfd->boot_notification_led, 0);
 		mfd->boot_notification_led = NULL;
 	}
+
+	// -  - MA3-589 - Apply SHARP backlight mapping rule {
+	if (mfd->panel_info->sharp_bl_mapping) {
+		pr_debug("[LCMDEBUG]=============old backlight=%d\n", value);
+		value = fih_interp_to_target_level(panel_lux_bl_map, target_lux_bl_map, value);
+		pr_debug("[LCMDEBUG]=============new backlight=%d\n", value);
+	}
+	// -  - MA3-589 - Apply SHARP backlight mapping rule }
 
 	if (value > mfd->panel_info->brightness_max)
 		value = mfd->panel_info->brightness_max;
@@ -1635,7 +1716,6 @@ static void mdss_fb_scale_bl(struct msm_fb_data_type *mfd, u32 *bl_lvl)
 			temp = mfd->bl_min_lvl;
 	}
 	pr_debug("output = %d\n", temp);
-
 	(*bl_lvl) = temp;
 }
 
@@ -3174,7 +3254,7 @@ static int mdss_fb_pan_display_ex(struct fb_info *info,
 	if (var->yoffset > (info->var.yres_virtual - info->var.yres))
 		return -EINVAL;
 
-	ret = mdss_fb_pan_idle(mfd);
+	ret = mdss_fb_wait_for_kickoff(mfd);
 	if (ret) {
 		pr_err("wait_for_kick failed. rc=%d\n", ret);
 		return ret;
@@ -3563,10 +3643,31 @@ void mdss_panelinfo_to_fb_var(struct mdss_panel_info *pinfo,
 				(unsigned long int) pinfo->clk_rate / 1000);
 	}
 
+	//Display-CTS_Xdpi_Ydpi-00+{_20151112
+	if (pinfo->physical_width_full)
+	{
+		var->width = pinfo->physical_width_full;
+	}
+	else
+	{
 	if (pinfo->physical_width)
+		{
 		var->width = pinfo->physical_width;
+		}
+	}
+
+	if (pinfo->physical_height_full)
+	{
+		var->height = pinfo->physical_height_full;
+	}
+	else
+	{
 	if (pinfo->physical_height)
+		{
 		var->height = pinfo->physical_height;
+		}
+	}
+	//Display-CTS_Xdpi_Ydpi-00+}_20151112
 
 	pr_debug("ScreenInfo: res=%dx%d [%d, %d] [%d, %d]\n",
 		var->xres, var->yres, var->left_margin,
@@ -3643,9 +3744,6 @@ skip_commit:
 	if (IS_ERR_VALUE(ret) || !sync_pt_data->flushed) {
 		mdss_fb_release_kickoff(mfd);
 		mdss_fb_signal_timeline(sync_pt_data);
-		if ((mfd->panel.type == MIPI_CMD_PANEL) &&
-			(mfd->mdp.signal_retire_fence))
-			mfd->mdp.signal_retire_fence(mfd, 1);
 	}
 
 	if (dynamic_dsi_switch) {
@@ -4473,7 +4571,6 @@ static int mdss_fb_atomic_commit_ioctl(struct fb_info *info,
 	struct mdp_frc_info *frc_info = NULL;
 	struct mdp_frc_info __user *frc_info_user;
 	struct msm_fb_data_type *mfd;
-	struct mdss_overlay_private *mdp5_data = NULL;
 
 	ret = copy_from_user(&commit, argp, sizeof(struct mdp_layer_commit));
 	if (ret) {
@@ -4485,20 +4582,9 @@ static int mdss_fb_atomic_commit_ioctl(struct fb_info *info,
 	if (!mfd)
 		return -EINVAL;
 
-	mdp5_data = mfd_to_mdp5_data(mfd);
-
 	if (mfd->panel_info->panel_dead) {
 		pr_debug("early commit return\n");
 		MDSS_XLOG(mfd->panel_info->panel_dead);
-		/*
-		 * In case of an ESD attack, since we early return from the
-		 * commits, we need to signal the outstanding fences.
-		 */
-		mdss_fb_release_fences(mfd);
-		if ((mfd->panel.type == MIPI_CMD_PANEL) &&
-			mfd->mdp.signal_retire_fence && mdp5_data)
-			mfd->mdp.signal_retire_fence(mfd,
-						mdp5_data->retire_cnt);
 		return 0;
 	}
 

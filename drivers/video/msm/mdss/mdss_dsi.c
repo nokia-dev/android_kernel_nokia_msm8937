@@ -45,6 +45,46 @@ static struct mdss_dsi_data *mdss_dsi_res;
 
 static struct pm_qos_request mdss_dsi_pm_qos_request;
 
+//Display-ImplementCECTCABC-00+{_20160126
+static struct mdss_dsi_ctrl_pdata *gpdata  = NULL;
+
+unsigned long ce_en = 0;
+unsigned long ct_set = 0;
+unsigned long cabc_set = 0;
+
+#if 0
+static unsigned long vddio_set = 0;
+static unsigned long avdd_set = 0;
+static unsigned long avee_set = 0;
+static unsigned long reset_set = 0;
+static unsigned long init_set = 0;
+static unsigned long ldos_set = 0;
+#endif
+
+int CE_enable = 0;
+int CT_enable = 0;
+int CABC_enable = 0;
+
+int SendCEOnlyAfterResume = 0;
+int SendCTOnlyAfterResume = 0;
+int SendCABCOnlyAfterResume = 0;
+
+int vddio_enable = 0;
+int avdd_enable = 0;
+int avee_enable = 0;
+//Display-ImplementCECTCABC-00+}_20160126
+
+//Display-SendCECTCABCBeforeInit-00+{_20161213
+int SendCEBeforeInit = 0;
+int SendCTBeforeInit = 0;
+int SendCABCBeforeInit = 0;
+//Display-SendCECTCABCBeforeInit-00+}_20161213
+
+//Display-BBox-03+{_20161028
+/* Black Box */
+#define BBOX_LCM_OEM_FUNCTIONS_FAIL	do {printk("BBox;%s: LCM OEM functions (CE or CT or BLF or CABC) functions fail!\n", __func__); printk("BBox::UEC;0::8\n");} while (0);
+//Display-BBox-03+}_20161028
+
 static void mdss_dsi_pm_qos_add_request(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 {
 	struct irq_info *irq_info;
@@ -277,6 +317,8 @@ static int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
 	int ret = 0;
 	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
 
+	pr_debug("\n\n******************** [HL] %s +++ **********************\n\n", __func__);
+
 	if (pdata == NULL) {
 		pr_err("%s: Invalid input data\n", __func__);
 		ret = -EINVAL;
@@ -286,23 +328,103 @@ static int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
 	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
 
-	ret = mdss_dsi_panel_reset(pdata, 0);
-	if (ret) {
-		pr_warn("%s: Panel reset failed. rc=%d\n", __func__, ret);
-		ret = 0;
+	//Display-BringUpILI7807E-00*{_20160725
+	pr_debug("\n\n******************** [HL] %s: ctrl_pdata->panel_data.panel_info.pid = %d	**********************\n\n",__func__, ctrl_pdata->panel_data.panel_info.pid);
+	switch (ctrl_pdata->panel_data.panel_info.pid)
+	{
+		case FIH_ILI7807E_1080P_VIDEO_PANEL:
+			{
+				//Pull LOW LCM Reset Pin
+				ret = mdss_dsi_panel_reset(pdata, 0);
+				if (ret) {
+					pr_warn("%s: Panel reset failed. rc=%d\n", __func__, ret);
+					ret = 0;
+				}
+
+				if (mdss_dsi_pinctrl_set_state(ctrl_pdata, false))
+					pr_debug("reset disable: pinctrl not enabled\n");
+
+				//Pull LOW 1.8V(LCM & TP) and +5V/-5V(LCM)
+				ret = msm_dss_enable_vreg(
+					ctrl_pdata->panel_power_data.vreg_config,
+					ctrl_pdata->panel_power_data.num_vreg, 0);
+				if (ret)
+					pr_err("%s: failed to disable vregs for %s\n",
+						__func__, __mdss_dsi_pm_name(DSI_PANEL_PM));
+
+				mdelay(5);
+
+				//Pull LOW TP Rest Pin
+				pr_debug("\n\n******************** [HL] %s, ctrl_pdata->tp_reset_gpio = %d	**********************\n\n", __func__, ctrl_pdata->tp_reset_gpio);
+				gpio_set_value(ctrl_pdata->tp_reset_gpio, 0);
+				gpio_free(ctrl_pdata->tp_reset_gpio);
+
+				//Pull LOW TP 1.8V Pin
+				pr_debug("\n\n******************** [HL] %s, ctrl_pdata->tp_1p8_en_gpio = %d	**********************\n\n", __func__, ctrl_pdata->tp_1p8_en_gpio);
+				gpio_set_value(ctrl_pdata->tp_1p8_en_gpio, 0);
+				gpio_free(ctrl_pdata->tp_1p8_en_gpio);
+
+				//Pull LOW TP 2.8V Pin
+				pr_debug("\n\n******************** [HL] %s, ctrl_pdata->tp_2p8_en_gpio = %d	**********************\n\n", __func__, ctrl_pdata->tp_2p8_en_gpio);
+				gpio_set_value(ctrl_pdata->tp_2p8_en_gpio, 0);
+				gpio_free(ctrl_pdata->tp_2p8_en_gpio);
+			}
+			break;
+		case FIH_SHARP_FT8607_720P_VIDEO_PANEL:
+			{
+				//Pull LOW TP Rest Pin
+				pr_debug("\n\n******************** [HL] %s, ctrl_pdata->tp_reset_gpio = %d	**********************\n\n", __func__, ctrl_pdata->tp_reset_gpio);
+				gpio_set_value(ctrl_pdata->tp_reset_gpio, 0);
+				gpio_free(ctrl_pdata->tp_reset_gpio);
+
+				ret = mdss_dsi_panel_reset(pdata, 0);
+				if (ret) {
+					pr_warn("%s: Panel reset failed. rc=%d\n", __func__, ret);
+					ret = 0;
+				}
+
+				if (mdss_dsi_pinctrl_set_state(ctrl_pdata, false))
+					pr_debug("reset disable: pinctrl not enabled\n");
+
+				mdelay(5);
+
+				ret = msm_dss_enable_vreg(
+					ctrl_pdata->panel_power_data.vreg_config,
+					ctrl_pdata->panel_power_data.num_vreg, 0);
+				if (ret)
+					pr_err("%s: failed to disable vregs for %s\n",
+						__func__, __mdss_dsi_pm_name(DSI_PANEL_PM));
+			}
+			break;
+		default:
+			{
+				ret = mdss_dsi_panel_reset(pdata, 0);
+				if (ret) {
+					pr_warn("%s: Panel reset failed. rc=%d\n", __func__, ret);
+					ret = 0;
+				}
+
+				if (mdss_dsi_pinctrl_set_state(ctrl_pdata, false))
+					pr_debug("reset disable: pinctrl not enabled\n");
+
+				mdelay(5);
+
+				ret = msm_dss_enable_vreg(
+					ctrl_pdata->panel_power_data.vreg_config,
+					ctrl_pdata->panel_power_data.num_vreg, 0);
+				if (ret)
+					pr_err("%s: failed to disable vregs for %s\n",
+						__func__, __mdss_dsi_pm_name(DSI_PANEL_PM));
+			}
+			break;
 	}
+	//Display-BringUpILI7807E-00*}_20160725
 
-	if (mdss_dsi_pinctrl_set_state(ctrl_pdata, false))
-		pr_debug("reset disable: pinctrl not enabled\n");
-
-	ret = msm_dss_enable_vreg(
-		ctrl_pdata->panel_power_data.vreg_config,
-		ctrl_pdata->panel_power_data.num_vreg, 0);
-	if (ret)
-		pr_err("%s: failed to disable vregs for %s\n",
-			__func__, __mdss_dsi_pm_name(DSI_PANEL_PM));
+	pr_debug("\n\n******************** [HL] %s ---, ret = %d **********************\n\n", __func__, ret);
 
 end:
+	pr_debug("\n\n******************** [HL] %s end ---, ret = %d **********************\n\n", __func__, ret);
+
 	return ret;
 }
 
@@ -310,6 +432,8 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
 {
 	int ret = 0;
 	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
+
+	pr_debug("\n\n******************** [HL] %s +++ **********************\n\n", __func__);
 
 	if (pdata == NULL) {
 		pr_err("%s: Invalid input data\n", __func__);
@@ -319,31 +443,126 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
 	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
 
-	ret = msm_dss_enable_vreg(
-		ctrl_pdata->panel_power_data.vreg_config,
-		ctrl_pdata->panel_power_data.num_vreg, 1);
-	if (ret) {
-		pr_err("%s: failed to enable vregs for %s\n",
-			__func__, __mdss_dsi_pm_name(DSI_PANEL_PM));
-		return ret;
-	}
+	//Display-BringUpILI7807E-00*{_20160725
+	pr_debug("\n\n******************** [HL] %s: ctrl_pdata->panel_data.panel_info.pid = %d	**********************\n\n",__func__, ctrl_pdata->panel_data.panel_info.pid);
+	switch (ctrl_pdata->panel_data.panel_info.pid)
+	{
+		case FIH_ILI7807E_1080P_VIDEO_PANEL:
+			{
+				//Pull HIGH TP 2P8 Enable Pin
+				pr_debug("\n\n******************** [HL] %s, ctrl_pdata->tp_2p8_en_gpio = %d  **********************\n\n", __func__, ctrl_pdata->tp_2p8_en_gpio);
+				if (gpio_request(ctrl_pdata->tp_2p8_en_gpio, "tp_2p8_en")) {
+					pr_err("%s:request vddio en gpio failed\n", __func__);
+					//BBOX_LCM_GPIO_FAIL
+					gpio_free(ctrl_pdata->tp_2p8_en_gpio);
+					return -ENODEV;
+				}
+				gpio_set_value(ctrl_pdata->tp_2p8_en_gpio, 1);
 
-	/*
-	 * If continuous splash screen feature is enabled, then we need to
-	 * request all the GPIOs that have already been configured in the
-	 * bootloader. This needs to be done irresepective of whether
-	 * the lp11_init flag is set or not.
-	 */
-	if (pdata->panel_info.cont_splash_enabled ||
-		!pdata->panel_info.mipi.lp11_init) {
-		if (mdss_dsi_pinctrl_set_state(ctrl_pdata, true))
-			pr_debug("reset enable: pinctrl not enabled\n");
+				//Pull HIGH TP 1P8 Enable Pin
+				pr_debug("\n\n******************** [HL] %s, ctrl_pdata->tp_1p8_en_gpio = %d  **********************\n\n", __func__, ctrl_pdata->tp_1p8_en_gpio);
+				if (gpio_request(ctrl_pdata->tp_1p8_en_gpio, "tp_1p8_en")) {
+					pr_err("%s:request vddio en gpio failed\n", __func__);
+					//BBOX_LCM_GPIO_FAIL
+					gpio_free(ctrl_pdata->tp_1p8_en_gpio);
+					return -ENODEV;
+				}
+				gpio_set_value(ctrl_pdata->tp_1p8_en_gpio, 1);
 
-		ret = mdss_dsi_panel_reset(pdata, 1);
-		if (ret)
-			pr_err("%s: Panel reset failed. rc=%d\n",
-					__func__, ret);
+					//Pull HIGH 1.8(LCM & TP) and +5V/-5V(LCM)
+					ret = msm_dss_enable_vreg(
+						ctrl_pdata->panel_power_data.vreg_config,
+						ctrl_pdata->panel_power_data.num_vreg, 1);
+					if (ret) {
+						pr_err("%s: failed to enable vregs for %s\n",
+							__func__, __mdss_dsi_pm_name(DSI_PANEL_PM));
+						return ret;
+					}
+
+				mdelay(2);
+
+				//Pull HIGH TP Reset Pin
+				pr_debug("\n\n******************** [HL] %s, ctrl_pdata->tp_reset_gpio = %d  **********************\n\n", __func__, ctrl_pdata->tp_reset_gpio);
+				if (gpio_request(ctrl_pdata->tp_reset_gpio, "tp_reset")) {
+					pr_err("%s:request vddio en gpio failed\n", __func__);
+					//BBOX_LCM_GPIO_FAIL
+					gpio_free(ctrl_pdata->tp_reset_gpio);
+					return -ENODEV;
+				}
+				gpio_set_value(ctrl_pdata->tp_reset_gpio, 1);
+			}
+			break;
+		case FIH_SHARP_FT8607_720P_VIDEO_PANEL:
+			{
+				ret = msm_dss_enable_vreg(
+					ctrl_pdata->panel_power_data.vreg_config,
+					ctrl_pdata->panel_power_data.num_vreg, 1);
+				if (ret) {
+					pr_err("%s: failed to enable vregs for %s\n",
+						__func__, __mdss_dsi_pm_name(DSI_PANEL_PM));
+					return ret;
+				}
+
+				//Pull HIGH TP Reset Pin
+				pr_debug("\n\n******************** [HL] %s, ctrl_pdata->tp_reset_gpio = %d  **********************\n\n", __func__, ctrl_pdata->tp_reset_gpio);
+				if (gpio_request(ctrl_pdata->tp_reset_gpio, "tp_reset")) {
+					pr_err("%s:request vddio en gpio failed\n", __func__);
+					//BBOX_LCM_GPIO_FAIL
+					gpio_free(ctrl_pdata->tp_reset_gpio);
+					return -ENODEV;
+				}
+
+				/*
+				 * If continuous splash screen feature is enabled, then we need to
+				 * request all the GPIOs that have already been configured in the
+				 * bootloader. This needs to be done irresepective of whether
+				 * the lp11_init flag is set or not.
+				 */
+				if (pdata->panel_info.cont_splash_enabled ||
+					!pdata->panel_info.mipi.lp11_init) {
+					if (mdss_dsi_pinctrl_set_state(ctrl_pdata, true))
+						pr_debug("reset enable: pinctrl not enabled\n");
+
+					ret = mdss_dsi_panel_reset(pdata, 1);
+					if (ret)
+						pr_err("%s: Panel reset failed. rc=%d\n",
+								__func__, ret);
+				}
+			}
+			break;
+		default:
+			{
+				ret = msm_dss_enable_vreg(
+					ctrl_pdata->panel_power_data.vreg_config,
+					ctrl_pdata->panel_power_data.num_vreg, 1);
+				if (ret) {
+					pr_err("%s: failed to enable vregs for %s\n",
+						__func__, __mdss_dsi_pm_name(DSI_PANEL_PM));
+					return ret;
+				}
+
+				/*
+				 * If continuous splash screen feature is enabled, then we need to
+				 * request all the GPIOs that have already been configured in the
+				 * bootloader. This needs to be done irresepective of whether
+				 * the lp11_init flag is set or not.
+				 */
+				if (pdata->panel_info.cont_splash_enabled ||
+					!pdata->panel_info.mipi.lp11_init) {
+					if (mdss_dsi_pinctrl_set_state(ctrl_pdata, true))
+						pr_debug("reset enable: pinctrl not enabled\n");
+
+					ret = mdss_dsi_panel_reset(pdata, 1);
+					if (ret)
+						pr_err("%s: Panel reset failed. rc=%d\n",
+								__func__, ret);
+				}
+			}
+			break;
 	}
+	//Display-BringUpILI7807E-00*}_20160725
+
+	pr_debug("\n\n******************** [HL] %s ---, ret = %d **********************\n\n", __func__, ret);
 
 	return ret;
 }
@@ -1401,6 +1620,17 @@ static int mdss_dsi_update_panel_config(struct mdss_dsi_ctrl_pdata *ctrl_pdata,
 	return ret;
 }
 
+//Force lp11 before reset to match spec
+void mdss_dsi_force_lp11(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
+{
+	u32 tmp;
+	tmp = MIPI_INP((ctrl_pdata->ctrl_base) + 0xac);
+	tmp &= ~(1<<28);
+	MIPI_OUTP((ctrl_pdata->ctrl_base) + 0xac, tmp);
+	wmb();
+	pr_err("Force lp11\n");
+}
+
 int mdss_dsi_on(struct mdss_panel_data *pdata)
 {
 	int ret = 0;
@@ -1488,6 +1718,7 @@ int mdss_dsi_on(struct mdss_panel_data *pdata)
 	 * data lanes for LP11 init
 	 */
 	if (mipi->lp11_init) {
+		pr_err("lp11_init enabled\n");
 		if (mdss_dsi_pinctrl_set_state(ctrl_pdata, true))
 			pr_debug("reset enable: pinctrl not enabled\n");
 		mdss_dsi_panel_reset(pdata, 1);
@@ -2596,6 +2827,506 @@ static struct device_node *mdss_dsi_get_fb_node_cb(struct platform_device *pdev)
 	return fb_node;
 }
 
+//Display-ImplementCECTCABC-00+{_20160126
+int fih_get_ce (void)
+{
+	return ce_en;
+}
+EXPORT_SYMBOL(fih_get_ce);
+
+int fih_set_ce (int ce)
+{
+	int res;
+#if 0
+	int i;
+
+	if (!gInSplashScreen)
+	{
+		res = mdss_dsi_panel_ce_onoff(gpdata, ce);
+		if (!res) //Display-EnhanceErrorHandling-00*_20150320
+		{
+			goto fail;
+		}
+
+		ce_en = ce;
+	}
+	else
+	{
+		for (i = 3; i > 0; i--)
+		{
+			mdelay(500);
+
+			if (!gInSplashScreen)
+			{
+				res = mdss_dsi_panel_ce_onoff(gpdata, ce);
+				if (!res) //Display-EnhanceErrorHandling-00*_20150320
+				{
+					goto fail;
+				}
+
+				ce_en = ce;
+
+				break;
+			}
+		}
+	}
+#else
+	res = mdss_dsi_panel_ce_onoff(gpdata, ce);
+	if (!res) //Display-EnhanceErrorHandling-00*_20150320
+	{
+		goto fail;
+	}
+
+	ce_en = ce;
+#endif
+	return res; //jason add for solved always show bbox log
+fail:
+	BBOX_LCM_OEM_FUNCTIONS_FAIL	//Display-BBox-03+_20161028
+	return res;
+}
+EXPORT_SYMBOL(fih_set_ce);
+
+int fih_get_ct (void)
+{
+	return ct_set;
+}
+EXPORT_SYMBOL(fih_get_ct);
+
+int fih_set_ct (int ct)
+{
+	int res;
+#if 0
+	int i;
+
+	if (!gInSplashScreen)
+	{
+		res = mdss_dsi_panel_ct_set(gpdata, ct);
+		if (!res)	 //Display-EnhanceErrorHandling-00*_20150320
+		{
+			goto fail;
+		}
+
+		ct_set = ct;
+	}
+	else
+	{
+		for (i = 3; i > 0; i--)
+		{
+			mdelay(500);
+
+			if (!gInSplashScreen)
+			{
+				res = mdss_dsi_panel_ct_set(gpdata, ct);
+				if (!res)	 //Display-EnhanceErrorHandling-00*_20150320
+				{
+					goto fail;
+				}
+
+				ct_set = ct;
+
+				break;
+			}
+		}
+	}
+#else
+	res = mdss_dsi_panel_ct_set(gpdata, ct);
+	if (!res)	 //Display-EnhanceErrorHandling-00*_20150320
+	{
+		goto fail;
+	}
+
+	ct_set = ct;
+#endif
+	return res; //jason add for solved always show bbox log
+fail:
+	BBOX_LCM_OEM_FUNCTIONS_FAIL //Display-BBox-03+_20161028
+	return res;
+}
+EXPORT_SYMBOL(fih_set_ct);
+
+int fih_get_cabc (void)
+{
+	return cabc_set;
+}
+EXPORT_SYMBOL(fih_get_cabc);
+
+int fih_set_cabc(int cabc)
+{
+	int res;
+#if 0
+	int i;
+
+	if (!gInSplashScreen)
+	{
+		res = mdss_dsi_panel_cabc_set(gpdata, cabc);
+		if (!res)	 //Display-EnhanceErrorHandling-00*_20150320
+		{
+			goto fail;
+		}
+
+		cabc_set = cabc;
+	}
+	else
+	{
+		for (i = 3; i > 0; i--)
+		{
+			mdelay(500);
+
+			if (!gInSplashScreen)
+			{
+				res = mdss_dsi_panel_cabc_set(gpdata, cabc);
+				if (!res)	 //Display-EnhanceErrorHandling-00*_20150320
+				{
+					goto fail;
+				}
+
+				cabc_set = cabc;
+
+				break;
+			}
+		}
+	}
+#else
+	res = mdss_dsi_panel_cabc_set(gpdata, cabc);
+	if (!res)	 //Display-EnhanceErrorHandling-00*_20150320
+	{
+		goto fail;
+	}
+
+	cabc_set = cabc;
+#endif
+	return res; //jason add for solved always show bbox log
+fail:
+	BBOX_LCM_OEM_FUNCTIONS_FAIL //Display-BBox-03+_20161028
+	return res;
+}
+EXPORT_SYMBOL(fih_set_cabc);
+
+//Display-DynamicReadWriteRegister-00+{_20160729
+void fih_get_read_reg (char *reg_val)
+{
+	mdss_dsi_panel_read_reg_get(reg_val);
+
+	return;
+
+}
+EXPORT_SYMBOL(fih_get_read_reg);
+
+void fih_set_read_reg(unsigned int reg, unsigned int reg_len)
+{
+	mdss_dsi_panel_read_reg_set(gpdata, reg, reg_len);
+
+	return;
+}
+EXPORT_SYMBOL(fih_set_read_reg);
+
+void fih_set_write_reg(unsigned int len, char *data)
+{
+	mdss_dsi_panel_write_reg_set(gpdata, len, data);
+
+	return;
+}
+EXPORT_SYMBOL(fih_set_write_reg);
+//Display-DynamicReadWriteRegister-00+}_20160729
+
+#if 0
+int fih_get_vddio (void)
+{
+	return vddio_set;
+}
+EXPORT_SYMBOL(fih_get_vddio);
+
+int fih_set_vddio(int vddio)
+{
+	pr_debug("\n\n******************** [HL] %s +++, gpdata->vddio_gpio = %d, vddio = %d **********************\n\n", __func__, gpdata->vddio_gpio, vddio);
+
+	gpio_set_value(gpdata->vddio_gpio, vddio);
+
+	vddio_set = vddio;
+
+	return 0;
+}
+EXPORT_SYMBOL(fih_set_vddio);
+
+int fih_get_avdd (void)
+{
+	return avdd_set;
+}
+EXPORT_SYMBOL(fih_get_avdd);
+
+int fih_set_avdd(int avdd)
+{
+	pr_debug("\n\n******************** [HL] %s +++, gpdata->avdd_gpio = %d, avdd = %d **********************\n\n", __func__, gpdata->avdd_gpio, avdd);
+
+	gpio_set_value(gpdata->avdd_gpio, avdd);
+
+	avdd_set = avdd;
+
+	return 0;
+}
+EXPORT_SYMBOL(fih_set_avdd);
+
+int fih_get_avee (void)
+{
+	return avee_set;
+}
+EXPORT_SYMBOL(fih_get_avee);
+
+int fih_set_avee(int avee)
+{
+	pr_debug("\n\n******************** [HL] %s +++, gpdata->avee_gpio = %d, avee = %d **********************\n\n", __func__, gpdata->avee_gpio, avee);
+
+	gpio_set_value(gpdata->avee_gpio, avee);
+
+	avee_set = avee;
+
+	return 0;
+}
+EXPORT_SYMBOL(fih_set_avee);
+
+int fih_get_reset (void)
+{
+	return reset_set;
+}
+EXPORT_SYMBOL(fih_get_reset);
+
+int fih_set_reset(int reset)
+{
+	int i = 0;
+	struct mdss_panel_info *pinfo = NULL;
+
+	pr_debug("\n\n******************** [HL] %s +++, gpdata->rst_gpio = %d, reset = %d **********************\n\n", __func__, gpdata->rst_gpio, reset);
+
+	pinfo = &(gpdata->panel_data.panel_info);
+
+	if (reset)
+	{
+		//if (mdss_dsi_pinctrl_set_state(gpdata, true))
+		//{
+		//	pr_debug("reset enable: pinctrl not enabled\n");
+		//}
+
+		for (i = 0; i < pinfo->rst_seq_len; ++i) {
+			gpio_set_value((gpdata->rst_gpio),
+				pinfo->rst_seq[i]);
+			if (pinfo->rst_seq[++i])
+				usleep(pinfo->rst_seq[i] * 1000);
+			pr_debug("\n\n******************** [HL] %s, i = %d **********************\n\n", __func__, i);
+		}
+	}
+	else
+	{
+		gpio_set_value((gpdata->rst_gpio), 0);
+
+		//if (mdss_dsi_pinctrl_set_state(gpdata, false))
+		//{
+		//	pr_debug("reset disable: pinctrl not enabled\n");
+		//}
+	}
+
+	reset_set = reset;
+
+	return 0;
+}
+EXPORT_SYMBOL(fih_set_reset);
+
+int fih_get_init (void)
+{
+	return init_set;
+}
+EXPORT_SYMBOL(fih_get_init);
+
+int fih_set_init(int init)
+{
+	int res = 0;
+	int len = 1;
+
+	pr_debug("\n\n******************** [HL] %s +++, init = %d **********************\n\n", __func__, init);
+
+	if (init)
+	{
+		if (gpdata->on_cmds.cmd_cnt)
+		{
+			len = gpdata->cmds_send(gpdata, &gpdata->on_cmds);
+			if (!len)
+			{
+				goto fail;
+			}
+		}
+	}
+	else
+	{
+		if (gpdata->off_cmds.cmd_cnt)
+		{
+			len = gpdata->cmds_send(gpdata, &gpdata->off_cmds);
+			if (!len)
+			{
+				goto fail;
+			}
+		}
+	}
+
+	init_set = init;
+
+fail:
+	return res;
+}
+EXPORT_SYMBOL(fih_set_init);
+
+int fih_get_ldos (void)
+{
+	return ldos_set;
+}
+EXPORT_SYMBOL(fih_get_ldos);
+
+int fih_set_ldos(int ldos)
+{
+	int res;
+	int i = 0;
+
+	pr_debug("\n\n******************** [HL] %s +++, ldos = %d **********************\n\n", __func__, ldos);
+
+	if (ldos)
+	{
+		for (i = 0; i < DSI_MAX_PM; i++)
+		{
+			/*
+			 * Core power module will be enabled when the
+			 * clocks are enabled
+			 */
+			//if (DSI_CORE_PM == i)
+			//	continue;
+			res = msm_dss_enable_vreg(
+				gpdata->power_data[i].vreg_config,
+				gpdata->power_data[i].num_vreg, 1);
+			if (res)
+			{
+				pr_err("%s: failed to enable vregs for %s\n",
+					__func__, __mdss_dsi_pm_name(i));
+				goto fail;
+			}
+		}
+	}
+	else
+	{
+		for (i = DSI_MAX_PM - 1; i >= 0; i--)
+		{
+			/*
+			 * Core power module will be disabled when the
+			 * clocks are disabled
+			 */
+			//if (DSI_CORE_PM == i)
+			//	continue;
+			res = msm_dss_enable_vreg(
+				gpdata->power_data[i].vreg_config,
+				gpdata->power_data[i].num_vreg, 0);
+			if (res)
+			{
+				pr_err("%s: failed to disable vregs for %s\n",
+					__func__, __mdss_dsi_pm_name(i));
+				goto fail;
+			}
+		}
+	}
+
+	ldos_set = ldos;
+
+fail:
+	return res;
+}
+EXPORT_SYMBOL(fih_set_ldos);
+#endif
+
+static int fih_set_feature(void)
+{
+	int rc = 0;
+	//int ret = -EINVAL;	//Display-EnablePWMOutput-00-_20150605
+
+	pr_debug("\n\n*** [HL] %s +++ ***\n\n", __func__);
+
+	if (!SendCEBeforeInit && CE_enable)
+	{
+		//Display-EnablePWMOutput-00*{_20150605
+		#if 0
+		pr_debug("[HL]%s: fih_set_ce <-- start\n", __func__);
+		ret= fih_set_ce(ce_en);
+		if (!ret)	//Display-EnhanceErrorHandling-00*_20150320
+		{
+			pr_err("%s: unable to set ce command to the panel\n", __func__);
+			goto fail;
+		}
+		else
+		{
+			pr_debug("\n\n*** [HL] %s, Succeed to set ce command to the panel!, ce_en = %ld ***\n\n", __func__, ce_en);
+		}
+		pr_debug("[HL]%s: fih_set_ce <-- end\n", __func__);
+		#else
+		SendCEOnlyAfterResume = 1;
+		pr_debug("[HL]%s: SendCEOnlyAfterResume = 1\n", __func__);
+		#endif
+		//Display-EnablePWMOutput-00*}_20150605
+	}
+
+	if (!SendCTBeforeInit && CT_enable)
+	{
+		//Display-EnablePWMOutput-00*{_20150605
+		#if 0
+		pr_debug("[HL]%s: fih_set_ct <-- start\n", __func__);
+		ret = fih_set_ct(ct_set);
+		if (!ret)	//Display-EnhanceErrorHandling-00*_20150320
+		{
+			pr_err("%s: unable to set ct command to the panel\n", __func__);
+			goto fail;
+		}
+		else
+		{
+			pr_debug("\n\n*** [HL] %s, Succeed to set ct command to the panel!, ct_set = %ld ***\n\n", __func__, ct_set);
+		}
+		pr_debug("[HL]%s: fih_set_ct <-- end\n", __func__);
+		#else
+		SendCTOnlyAfterResume = 1;
+		pr_debug("[HL]%s: SendCTOnlyAfterResume = 1\n", __func__);
+		#endif
+		//Display-EnablePWMOutput-00*}_20150605
+	}
+
+	if (!SendCABCBeforeInit && CABC_enable)
+	{
+		//Display-EnablePWMOutput-00*{_20150605
+		#if 0
+		pr_debug("[HL]%s: fih_set_cabc <-- start\n", __func__);
+		ret = fih_set_cabc(cabc_set);
+		if (!ret)	//Display-EnhanceErrorHandling-00*_20150320
+		{
+			pr_err("%s: unable to set cabc command to the panel\n", __func__);
+			goto fail;
+		}
+		else
+		{
+			pr_debug("\n\n*** [HL] %s, Succeed to set cabc command to the panel!, cabc_set = %ld ***\n\n", __func__, cabc_set);
+		}
+		pr_debug("[HL]%s: fih_set_cabc <-- end\n", __func__);
+		#else
+		SendCABCOnlyAfterResume = 1;
+		pr_debug("[HL]%s: SendCABCOnlyAfterResume = 1\n", __func__);
+		#endif
+		//Display-EnablePWMOutput-00*}_20150605
+	}
+
+//Display-EnablePWMOutput-00*{_20150605
+#if 0
+fail:
+	pr_debug("\n\n*** [HL] %s ---, rc = %d ***\n\n", __func__, rc);
+#endif
+//Display-EnablePWMOutput-00*}_20150605
+
+	return rc;
+}
+EXPORT_SYMBOL(SendCEOnlyAfterResume);
+EXPORT_SYMBOL(SendCTOnlyAfterResume);
+EXPORT_SYMBOL(SendCABCOnlyAfterResume);
+//Display-ImplementCECTCABC-00+}_20160126
+
 static int mdss_dsi_event_handler(struct mdss_panel_data *pdata,
 				  int event, void *arg)
 {
@@ -2637,6 +3368,7 @@ static int mdss_dsi_event_handler(struct mdss_panel_data *pdata,
 		ctrl_pdata->refresh_clk_rate = true;
 		break;
 	case MDSS_EVENT_LINK_READY:
+		pr_debug("[HL]%s: MDSS_EVENT_LINK_READY <-- start\n", __func__);
 		if (ctrl_pdata->refresh_clk_rate)
 			rc = mdss_dsi_clk_refresh(pdata,
 				ctrl_pdata->update_phy_timing);
@@ -2644,38 +3376,59 @@ static int mdss_dsi_event_handler(struct mdss_panel_data *pdata,
 		rc = mdss_dsi_on(pdata);
 		mdss_dsi_op_mode_config(pdata->panel_info.mipi.mode,
 							pdata);
+		pr_debug("[HL]%s: MDSS_EVENT_LINK_READY <-- end\n", __func__);
 		break;
 	case MDSS_EVENT_UNBLANK:
+		pr_debug("[HL]%s: MDSS_EVENT_UNBLANK <-- start\n", __func__);
 		if (ctrl_pdata->on_cmds.link_state == DSI_LP_MODE)
 			rc = mdss_dsi_unblank(pdata);
+		pr_debug("[HL]%s: MDSS_EVENT_UNBLANK <-- end\n", __func__);
 		break;
 	case MDSS_EVENT_POST_PANEL_ON:
+		pr_debug("[HL]%s: MDSS_EVENT_POST_PANEL_ON <-- start\n", __func__);
 		rc = mdss_dsi_post_panel_on(pdata);
+		pr_debug("[HL]%s: MDSS_EVENT_POST_PANEL_ON <-- end\n", __func__);
 		break;
 	case MDSS_EVENT_PANEL_ON:
+		pr_debug("[HL]%s: MDSS_EVENT_PANEL_ON <-- start\n", __func__);
 		ctrl_pdata->ctrl_state |= CTRL_STATE_MDP_ACTIVE;
 		if (ctrl_pdata->on_cmds.link_state == DSI_HS_MODE)
 			rc = mdss_dsi_unblank(pdata);
 		pdata->panel_info.esd_rdy = true;
+		//Display-ImplementCECTCABC-00+{_20160126
+		if(strstr(saved_command_line, "androidboot.mode=0")!=NULL)
+		{
+			if (!pdata->panel_info.cont_splash_enabled)
+			{
+				rc = fih_set_feature();
+			}
+		}
+		//Display-ImplementCECTCABC-00+}_20160126
+		pr_debug("[HL]%s: MDSS_EVENT_PANEL_ON <-- end\n", __func__);
 		break;
 	case MDSS_EVENT_BLANK:
+		pr_debug("[HL]%s: MDSS_EVENT_BLANK <-- start\n", __func__);
 		power_state = (int) (unsigned long) arg;
 		if (ctrl_pdata->off_cmds.link_state == DSI_HS_MODE)
 			rc = mdss_dsi_blank(pdata, power_state);
+		pr_debug("[HL]%s: MDSS_EVENT_BLANK <-- end\n", __func__);
 		break;
 	case MDSS_EVENT_PANEL_OFF:
+		pr_debug("[HL]%s: MDSS_EVENT_PANEL_OFF <-- start\n", __func__);
 		power_state = (int) (unsigned long) arg;
-		disable_esd_thread();
 		ctrl_pdata->ctrl_state &= ~CTRL_STATE_MDP_ACTIVE;
 		if (ctrl_pdata->off_cmds.link_state == DSI_LP_MODE)
 			rc = mdss_dsi_blank(pdata, power_state);
 		rc = mdss_dsi_off(pdata, power_state);
+		pr_debug("[HL]%s: MDSS_EVENT_PANEL_OFF <-- end\n", __func__);
 		break;
 	case MDSS_EVENT_CONT_SPLASH_FINISH:
+		pr_debug("[HL]%s: MDSS_EVENT_CONT_SPLASH_FINISH <-- start\n", __func__);
 		if (ctrl_pdata->off_cmds.link_state == DSI_LP_MODE)
 			rc = mdss_dsi_blank(pdata, MDSS_PANEL_POWER_OFF);
 		ctrl_pdata->ctrl_state &= ~CTRL_STATE_MDP_ACTIVE;
 		rc = mdss_dsi_cont_splash_on(pdata);
+		pr_debug("[HL]%s: MDSS_EVENT_CONT_SPLASH_FINISH <-- start\n", __func__);
 		break;
 	case MDSS_EVENT_PANEL_CLK_CTRL:
 		mdss_dsi_clk_req(ctrl_pdata,
@@ -3179,6 +3932,8 @@ static int mdss_dsi_ctrl_probe(struct platform_device *pdev)
 	static int te_irq_registered;
 	struct mdss_panel_data *pdata;
 
+	pr_debug("\n\n******************** [HL] %s +++	**********************\n\n", __func__);
+
 	if (!pdev || !pdev->dev.of_node) {
 		pr_err("%s: pdev not found for DSI controller\n", __func__);
 		return -ENODEV;
@@ -3225,6 +3980,8 @@ static int mdss_dsi_ctrl_probe(struct platform_device *pdev)
 	if (rc)
 		pr_warn("%s: failed to get pin resources\n", __func__);
 
+	pr_debug("\n\n******************** [HL] %s, mdss_dsi_pinctrl_init  **********************\n\n", __func__);
+
 	if (index == 0) {
 		ctrl_pdata->panel_data.panel_info.pdest = DISPLAY_1;
 		ctrl_pdata->ndx = DSI_CTRL_0;
@@ -3238,11 +3995,15 @@ static int mdss_dsi_ctrl_probe(struct platform_device *pdev)
 		return -EPERM;
 	}
 
+	pr_debug("\n\n******************** [HL] %s, ctrl_pdata->panel_data.panel_info.pdest = %d  **********************\n\n", __func__, ctrl_pdata->panel_data.panel_info.pdest);
+
 	dsi_pan_node = mdss_dsi_config_panel(pdev, index);
 	if (!dsi_pan_node) {
 		pr_err("%s: panel configuration failed\n", __func__);
 		return -EINVAL;
 	}
+
+	pr_debug("\n\n******************** [HL] %s, mdss_dsi_config_panel(pdev)  **********************\n\n", __func__);
 
 	if (!mdss_dsi_is_hw_config_split(ctrl_pdata->shared_data) ||
 		(mdss_dsi_is_hw_config_split(ctrl_pdata->shared_data) &&
@@ -3266,6 +4027,8 @@ static int mdss_dsi_ctrl_probe(struct platform_device *pdev)
 		goto error_pan_node;
 	}
 
+	pr_debug("\n\n******************** [HL] %s, dsi_panel_device_register(pdev, dsi_pan_node, ctrl_pdata)  **********************\n\n", __func__);
+
 	pinfo = &(ctrl_pdata->panel_data.panel_info);
 	if (!(mdss_dsi_is_hw_config_split(ctrl_pdata->shared_data) &&
 		mdss_dsi_is_ctrl_clk_slave(ctrl_pdata)) &&
@@ -3279,17 +4042,23 @@ static int mdss_dsi_ctrl_probe(struct platform_device *pdev)
 		}
 	}
 
+	pr_debug("\n\n******************** [HL] %s, mdss_dsi_is_hw_config_split(ctrl_pdata)  **********************\n\n", __func__);
+
 	rc = mdss_dsi_set_clk_rates(ctrl_pdata);
 	if (rc) {
 		pr_err("%s: Failed to set dsi clk rates\n", __func__);
 		return rc;
 	}
 
+	pr_debug("\n\n******************** [HL] %s, mdss_dsi_set_clk_rates(ctrl_pdata)  **********************\n\n", __func__);
+
 	rc = mdss_dsi_cont_splash_config(pinfo, ctrl_pdata);
 	if (rc) {
 		pr_err("%s: Failed to set dsi splash config\n", __func__);
 		return rc;
 	}
+
+	pr_debug("\n\n******************** [HL] %s, mdss_dsi_cont_splash_config(pinfo, ctrl_pdata)  **********************\n\n", __func__);
 
 	if (mdss_dsi_is_te_based_esd(ctrl_pdata)) {
 		init_completion(&ctrl_pdata->te_irq_comp);
@@ -3322,11 +4091,15 @@ static int mdss_dsi_ctrl_probe(struct platform_device *pdev)
 		}
 	}
 
+	pr_debug("\n\n******************** [HL] %s, mdss_dsi_is_te_based_esd(ctrl_pdata)  **********************\n\n", __func__);
+
 	rc = mdss_dsi_get_bridge_chip_params(pinfo, ctrl_pdata, pdev);
 	if (rc) {
 		pr_err("%s: Failed to get bridge params\n", __func__);
 		goto error_shadow_clk_deinit;
 	}
+
+	pr_debug("\n\n******************** [HL] %s, mdss_dsi_get_bridge_chip_params(pinfo, ctrl_pdata, pdev)  **********************\n\n", __func__);
 
 	ctrl_pdata->workq = create_workqueue("mdss_dsi_dba");
 	if (!ctrl_pdata->workq) {
@@ -3334,6 +4107,8 @@ static int mdss_dsi_ctrl_probe(struct platform_device *pdev)
 		rc = -EPERM;
 		goto error_pan_node;
 	}
+
+	pr_debug("\n\n******************** [HL] %s, ctrl_pdata->workq = create_workqueue  **********************\n\n", __func__);
 
 	INIT_DELAYED_WORK(&ctrl_pdata->dba_work, mdss_dsi_dba_work);
 
@@ -3347,6 +4122,103 @@ static int mdss_dsi_ctrl_probe(struct platform_device *pdev)
 	else
 		ctrl_pdata->shared_data->dsi1_active = true;
 
+	//Display-SendCECTCABCBeforeInit-00*{_20161213
+	//Display-ImplementCECTCABC-00+{_20160126
+	gpdata = devm_kzalloc(&pdev->dev,
+				  sizeof(struct mdss_dsi_ctrl_pdata),
+				  GFP_KERNEL);
+	if (!gpdata) {
+		pr_err("%s: FAILED: cannot alloc dsi ctr - gpdata\n",
+			   __func__);
+		rc = -ENOMEM;
+		goto error_no_mem;
+	}
+	platform_set_drvdata(pdev, gpdata);
+
+	gpdata = ctrl_pdata;
+
+	pr_debug("\n\n*** [HL] %s, BBB CE_enable = %d ***\n\n", __func__, CE_enable);
+	pr_debug("\n\n*** [HL] %s, BBB CT_enable = %d ***\n\n", __func__, CT_enable);
+	pr_debug("\n\n*** [HL] %s, BBB CABC_enable = %d ***\n\n", __func__, CABC_enable);
+	pr_debug("\n\n*** [HL] %s, BBB SendCEBeforeInit = %d ***\n\n", __func__, SendCEBeforeInit);
+	pr_debug("\n\n*** [HL] %s, BBB SendCTBeforeInit = %d ***\n\n", __func__, SendCTBeforeInit);
+	pr_debug("\n\n*** [HL] %s, BBB SendCABCBeforeInit = %d ***\n\n", __func__, SendCABCBeforeInit);
+
+	if (CE_enable && CT_enable && CABC_enable)
+	{
+		pr_debug("\n\n******************** [HL] %s ---, if (CE_enable && CT_enable && CABC_enable), probe OK, return 0  **********************\n\n", __func__);
+
+		return 0;
+	}
+
+	if((ctrl_pdata->ce_on_cmds.cmd_cnt) &&
+		(ctrl_pdata->ce_off_cmds.cmd_cnt))
+	{
+		CE_enable = 1;
+	}
+
+	if((ctrl_pdata->ct_cold_cmds.cmd_cnt) &&
+		(ctrl_pdata->ct_normal_cmds.cmd_cnt) &&
+	    	(ctrl_pdata->ct_warm_cmds.cmd_cnt) &&
+		(ctrl_pdata->blf_10_cmds.cmd_cnt) &&
+		(ctrl_pdata->blf_30_cmds.cmd_cnt) &&
+		(ctrl_pdata->blf_50_cmds.cmd_cnt) &&
+		(ctrl_pdata->blf_75_cmds.cmd_cnt))
+	{
+		CT_enable = 1;
+	}
+
+	if((ctrl_pdata->cabc_off_cmds.cmd_cnt) &&
+		(ctrl_pdata->cabc_ui_cmds.cmd_cnt) &&
+		(ctrl_pdata->cabc_still_cmds.cmd_cnt) &&
+		(ctrl_pdata->cabc_moving_cmds.cmd_cnt))
+	{
+		CABC_enable = 1;
+	}
+
+	if (SendCEBeforeInit && SendCTBeforeInit && SendCABCBeforeInit)
+	{
+		pr_debug("\n\n******************** [HL] %s ---, if (SendCEBeforeInit && SendCTBeforeInit && SendCABCBeforeInit), probe OK, return 0  **********************\n\n", __func__);
+
+		return 0;
+	}
+
+	if((ctrl_pdata->ce_on_cmds_beforeInit.cmd_cnt) &&
+		(ctrl_pdata->ce_off_cmds_beforeInit.cmd_cnt))
+	{
+		SendCEBeforeInit = 1;
+	}
+
+	if((ctrl_pdata->ct_cold_cmds_beforeInit.cmd_cnt) &&
+		(ctrl_pdata->ct_normal_cmds_beforeInit.cmd_cnt) &&
+	    	(ctrl_pdata->ct_warm_cmds_beforeInit.cmd_cnt) &&
+		(ctrl_pdata->blf_10_cmds_beforeInit.cmd_cnt) &&
+		(ctrl_pdata->blf_30_cmds_beforeInit.cmd_cnt) &&
+		(ctrl_pdata->blf_50_cmds_beforeInit.cmd_cnt) &&
+		(ctrl_pdata->blf_75_cmds_beforeInit.cmd_cnt))
+	{
+		SendCTBeforeInit = 1;
+	}
+
+	if((ctrl_pdata->cabc_off_cmds_beforeInit.cmd_cnt) &&
+		(ctrl_pdata->cabc_ui_cmds_beforeInit.cmd_cnt) &&
+		(ctrl_pdata->cabc_still_cmds_beforeInit.cmd_cnt) &&
+		(ctrl_pdata->cabc_moving_cmds_beforeInit.cmd_cnt))
+	{
+		SendCABCBeforeInit = 1;
+	}
+
+	pr_debug("\n\n*** [HL] %s, AAA CE_enable = %d ***\n\n", __func__, CE_enable);
+	pr_debug("\n\n*** [HL] %s, AAA CT_enable = %d ***\n\n", __func__, CT_enable);
+	pr_debug("\n\n*** [HL] %s, AAA CABC_enable = %d ***\n\n", __func__, CABC_enable);
+	pr_debug("\n\n*** [HL] %s, AAA SendCEBeforeInit = %d ***\n\n", __func__, SendCEBeforeInit);
+	pr_debug("\n\n*** [HL] %s, AAA SendCTBeforeInit = %d ***\n\n", __func__, SendCTBeforeInit);
+	pr_debug("\n\n*** [HL] %s, AAA SendCABCBeforeInit = %d ***\n\n", __func__, SendCABCBeforeInit);
+	//Display-ImplementCECTCABC-00+}_20160126
+	//Display-SendCECTCABCBeforeInit-00*}_20161213
+
+	pr_debug("\n\n******************** [HL] %s ---, probe OK, return 0  **********************\n\n", __func__);
+
 	return 0;
 
 error_shadow_clk_deinit:
@@ -3354,6 +4226,18 @@ error_shadow_clk_deinit:
 error_pan_node:
 	mdss_dsi_unregister_bl_settings(ctrl_pdata);
 	of_node_put(dsi_pan_node);
+
+	pr_debug("\n\n******************** [HL] %s ---, error_pan_node, rc = %d  **********************\n\n", __func__, rc);
+
+//Display-ImplementCECTCABC-00+{_20160126
+error_no_mem:
+	devm_kfree(&pdev->dev, ctrl_pdata);
+
+	devm_kfree(&pdev->dev, gpdata);
+//Display-ImplementCECTCABC-00+}_20160126
+
+	pr_debug("\n\n******************** [HL] %s ---, error_no_mem, rc = %d  **********************\n\n", __func__, rc);
+
 	return rc;
 }
 
@@ -4103,6 +4987,26 @@ static int mdss_dsi_parse_gpio_params(struct platform_device *ctrl_pdev,
 		pr_err("%s:%d, reset gpio not specified\n",
 						__func__, __LINE__);
 
+	//Display-BringUpILI7807E-01*{_20160822
+	ctrl_pdata->tp_1p8_en_gpio = of_get_named_gpio(ctrl_pdev->dev.of_node,
+			 "fih,platform-tp-1p8-en-gpio", 0);
+	if (!gpio_is_valid(ctrl_pdata->tp_1p8_en_gpio))
+		pr_err("%s:%d, tp 1p8 en gpio not specified\n",
+						__func__, __LINE__);
+
+	ctrl_pdata->tp_2p8_en_gpio = of_get_named_gpio(ctrl_pdev->dev.of_node,
+			 "fih,platform-tp-2p8-en-gpio", 0);
+	if (!gpio_is_valid(ctrl_pdata->tp_2p8_en_gpio))
+		pr_err("%s:%d, tp 2p8 en gpio not specified\n",
+						__func__, __LINE__);
+
+	ctrl_pdata->tp_reset_gpio = of_get_named_gpio(ctrl_pdev->dev.of_node,
+			 "fih,platform-tp-reset-gpio", 0);
+	if (!gpio_is_valid(ctrl_pdata->tp_reset_gpio))
+		pr_err("%s:%d, tp reset gpio not specified\n",
+						__func__, __LINE__);
+	//Display-BringUpILI7807E-01*}_20160822
+
 	if (pinfo->mode_gpio_state != MODE_GPIO_NOT_VALID) {
 
 		ctrl_pdata->mode_gpio = of_get_named_gpio(
@@ -4158,6 +5062,8 @@ int dsi_panel_device_register(struct platform_device *ctrl_pdev,
 	struct mdss_panel_info *pinfo = &(ctrl_pdata->panel_data.panel_info);
 	struct resource *res;
 	u64 clk_rate;
+
+	pr_debug("\n\n******************** [HL] %s +++  **********************\n\n", __func__);
 
 	mipi  = &(pinfo->mipi);
 
@@ -4309,6 +5215,9 @@ int dsi_panel_device_register(struct platform_device *ctrl_pdev,
 		ctrl_pdata->ctrl_base, ctrl_pdata->reg_size);
 
 	pr_debug("%s: Panel data initialized\n", __func__);
+
+	pr_debug("\n\n******************** [HL] %s ---  **********************\n\n", __func__);
+
 	return 0;
 }
 
@@ -4347,11 +5256,15 @@ static int __init mdss_dsi_driver_init(void)
 {
 	int ret;
 
+	pr_debug("\n\n******************** [HL] %s +++  **********************\n\n", __func__);
+
 	ret = mdss_dsi_register_driver();
 	if (ret) {
 		pr_err("mdss_dsi_register_driver() failed!\n");
 		return ret;
 	}
+
+	pr_debug("\n\n******************** [HL] %s ---  **********************\n\n", __func__);
 
 	return ret;
 }

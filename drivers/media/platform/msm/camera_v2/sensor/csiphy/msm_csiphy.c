@@ -51,7 +51,7 @@
 #define CSIPHY_SOF_DEBUG_COUNT                      2
 
 #undef CDBG
-#define CDBG(fmt, args...) pr_debug(fmt, ##args)
+#define CDBG(fmt, args...) pr_err(fmt, ##args) //,, add for debug
 
 static struct v4l2_file_operations msm_csiphy_v4l2_subdev_fops;
 

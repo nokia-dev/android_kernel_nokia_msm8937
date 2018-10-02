@@ -1,0 +1,12 @@
+#
+# Sharp Touchscreen configuration
+#
+
+if TOUCHSCREEN_SHTPS_DEV
+
+	config TOUCHSCREEN_SHTPS_FTS_FT8607
+		tristate "FOCALTECH FT8607"
+		default n
+		depends on TOUCHSCREEN_SHTPS_DEV
+
+endif # TOUCHSCREEN_SHTPS_DEV

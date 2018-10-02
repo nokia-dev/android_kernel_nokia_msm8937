@@ -90,6 +90,29 @@ enum {
 	PORTRAIT = 2,
 };
 
+//Display-ImplementCECTCABC-00+{_20160126
+enum {
+	COLOR_TEMP_WARM = 5500,
+	COLOR_TEMP_NORMAL = 6500,
+	COLOR_TEMP_COLD = 7500,
+};
+
+enum {
+	BL_FILTER_DISABLE,
+	BL_FILTER_10 = 10,
+	BL_FILTER_30 = 30,
+	BL_FILTER_50 = 50,
+	BL_FILTER_75 = 75,
+};
+
+enum {
+	CABC_OFF,
+	CABC_UI,
+	CABC_STILL,
+	CABC_MOVING,
+};
+//Display-ImplementCECTCABC-00+}_20160126
+
 enum dsi_trigger_type {
 	DSI_CMD_MODE_DMA,
 	DSI_CMD_MODE_MDP,
@@ -369,6 +392,8 @@ struct dsi_err_container {
 	u32 err_cnt;
 	u32 err_time_delta;
 	u32 max_err_index;
+	u32 dsi_ack_err_cnt; 	//Display-AckErrCountAndStatus-00+_20161014
+	u32 dsi_ack_err_status;	//Display-AckErrCountAndStatus-00+_20161014
 
 	u32 index;
 	s64 err_time[MAX_ERR_INDEX];
@@ -434,6 +459,9 @@ struct mdss_dsi_ctrl_pdata {
 	int bklt_en_gpio;
 	int mode_gpio;
 	int intf_mux_gpio;
+	int tp_1p8_en_gpio;				//Display-BringUpILI7807E-01+_20160822
+	int tp_2p8_en_gpio;				//Display-BringUpILI7807E-00+_20160725
+	int tp_reset_gpio;				//Display-BringUpILI7807E-00+_20160725
 	int bklt_ctrl;	/* backlight ctrl */
 	bool pwm_pmi;
 	int pwm_period;
@@ -485,6 +513,49 @@ struct mdss_dsi_ctrl_pdata {
 
 	struct dsi_panel_cmds video2cmd;
 	struct dsi_panel_cmds cmd2video;
+
+	//Display-ImplementCECTCABC-00+{_20160126
+	struct dsi_panel_cmds ce_on_cmds;
+	struct dsi_panel_cmds ce_off_cmds;
+
+	struct dsi_panel_cmds ct_normal_cmds;
+	struct dsi_panel_cmds ct_warm_cmds;
+	struct dsi_panel_cmds ct_cold_cmds;
+
+	struct dsi_panel_cmds blf_10_cmds;
+	struct dsi_panel_cmds blf_30_cmds;
+	struct dsi_panel_cmds blf_50_cmds;
+	struct dsi_panel_cmds blf_75_cmds;
+
+	struct dsi_panel_cmds cabc_off_cmds;
+	struct dsi_panel_cmds cabc_ui_cmds;
+	struct dsi_panel_cmds cabc_still_cmds;
+	struct dsi_panel_cmds cabc_moving_cmds;
+	//Display-ImplementCECTCABC-00+}_20160126
+
+	//Display-SendCECTCABCBeforeInit-00+{_20161213
+	//SW4-JSH-Display-moveFeatureBeforeInitCommand start
+	struct dsi_panel_cmds ce_on_cmds_beforeInit;
+	struct dsi_panel_cmds ce_off_cmds_beforeInit;
+	struct dsi_panel_cmds ct_normal_cmds_beforeInit;
+	struct dsi_panel_cmds ct_warm_cmds_beforeInit;
+	struct dsi_panel_cmds ct_cold_cmds_beforeInit;
+
+	struct dsi_panel_cmds blf_10_cmds_beforeInit;
+	struct dsi_panel_cmds blf_30_cmds_beforeInit;
+	struct dsi_panel_cmds blf_50_cmds_beforeInit;
+	struct dsi_panel_cmds blf_75_cmds_beforeInit;
+
+	struct dsi_panel_cmds cabc_off_cmds_beforeInit;
+	struct dsi_panel_cmds cabc_ui_cmds_beforeInit;
+	struct dsi_panel_cmds cabc_still_cmds_beforeInit;
+	struct dsi_panel_cmds cabc_moving_cmds_beforeInit;
+	//SW4-JSH-Display-moveFeatureBeforeInitCommand end
+	//Display-SendCECTCABCBeforeInit-00+}_20161213
+
+	struct dsi_panel_cmds switch_cmdpage_cmds;	//Display-ShowLCMAndBacklightStatus-00+_20160304
+
+	struct dsi_panel_cmds write_reg_cmds;	//Display-DynamicReadWriteRegister-00+_20160729
 
 	char pps_buf[DSC_PPS_LEN];	/* dsc pps */
 
@@ -595,7 +666,6 @@ int mdss_dsi_wait_for_lane_idle(struct mdss_dsi_ctrl_pdata *ctrl);
 
 irqreturn_t mdss_dsi_isr(int irq, void *ptr);
 irqreturn_t hw_vsync_handler(int irq, void *data);
-void disable_esd_thread(void);
 void mdss_dsi_irq_handler_config(struct mdss_dsi_ctrl_pdata *ctrl_pdata);
 
 void mdss_dsi_set_tx_power_mode(int mode, struct mdss_panel_data *pdata);
@@ -675,6 +745,16 @@ void mdss_dsi_set_reg(struct mdss_dsi_ctrl_pdata *ctrl, int off,
 	u32 mask, u32 val);
 int mdss_dsi_phy_pll_reset_status(struct mdss_dsi_ctrl_pdata *ctrl);
 int mdss_dsi_panel_power_ctrl(struct mdss_panel_data *pdata, int power_state);
+//Display-ImplementCECTCABC-00+{_20160126
+int mdss_dsi_panel_ce_onoff(struct mdss_dsi_ctrl_pdata *ctrl_pdata, unsigned long enable);
+int mdss_dsi_panel_ct_set(struct mdss_dsi_ctrl_pdata *ctrl_pdata, unsigned long value);
+int mdss_dsi_panel_cabc_set(struct mdss_dsi_ctrl_pdata *ctrl_pdata, unsigned long value);
+//Display-ImplementCECTCABC-00+}_20160126
+//Display-DynamicReadWriteRegister-00+{_20160729
+void mdss_dsi_panel_read_reg_get(char *reg_val);
+void mdss_dsi_panel_read_reg_set(struct mdss_dsi_ctrl_pdata *ctrl_pdata, unsigned int reg, unsigned int reg_len);
+void mdss_dsi_panel_write_reg_set(struct mdss_dsi_ctrl_pdata *ctrl_pdata, unsigned int len, char *data);
+//Display-DynamicReadWriteRegister-00+}_20160729
 
 static inline const char *__mdss_dsi_pm_name(enum dsi_pm_type module)
 {

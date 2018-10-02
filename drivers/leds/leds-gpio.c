@@ -22,6 +22,8 @@
 #include <linux/slab.h>
 #include <linux/workqueue.h>
 
+#define BBOX_GPIO_PROBE_FAIL do {printk("BBox::UEC;23::0\n");} while (0);
+
 struct gpio_led_data {
 	struct led_classdev cdev;
 	unsigned gpio;
@@ -246,7 +248,10 @@ static int gpio_led_probe(struct platform_device *pdev)
 				sizeof_gpio_leds_priv(pdata->num_leds),
 					GFP_KERNEL);
 		if (!priv)
+		{
+			BBOX_GPIO_PROBE_FAIL
 			return -ENOMEM;
+		}
 
 		priv->num_leds = pdata->num_leds;
 		for (i = 0; i < priv->num_leds; i++) {
@@ -255,6 +260,7 @@ static int gpio_led_probe(struct platform_device *pdev)
 					      &pdev->dev, pdata->gpio_blink_set);
 			if (ret < 0) {
 				/* On failure: unwind the led creations */
+				BBOX_GPIO_PROBE_FAIL
 				for (i = i - 1; i >= 0; i--)
 					delete_gpio_led(&priv->leds[i]);
 				return ret;
@@ -263,7 +269,10 @@ static int gpio_led_probe(struct platform_device *pdev)
 	} else {
 		priv = gpio_leds_create_of(pdev);
 		if (IS_ERR(priv))
+		{
+			BBOX_GPIO_PROBE_FAIL
 			return PTR_ERR(priv);
+		}
 	}
 
 	platform_set_drvdata(pdev, priv);

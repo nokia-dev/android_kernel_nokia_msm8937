@@ -1529,6 +1529,9 @@ static int tsens_tz_get_temp(struct thermal_zone_device *thermal,
 		return -EINVAL;
 
 	rc = msm_tsens_get_temp(tm_sensor->sensor_client_id, temp);
+	if (rc && (rc != -EPROBE_DEFER)) {
+		printk("BBox::UEC;22::7\n");
+	}
 	if (rc)
 		return rc;
 
@@ -5917,6 +5920,7 @@ static int tsens_thermal_zone_register(struct tsens_tm_device *tmdev)
 				"tsens_interrupt", tmdev);
 		if (rc < 0) {
 			pr_err("%s: request_irq FAIL: %d\n", __func__, rc);
+			printk("BBox::UEC;22::6\n");
 			for (i = 0; i < tmdev->tsens_num_sensor; i++)
 				thermal_zone_device_unregister(
 					tmdev->sensor[i].tz_dev);
@@ -5931,6 +5935,7 @@ static int tsens_thermal_zone_register(struct tsens_tm_device *tmdev)
 			"tsens_critical_interrupt", tmdev);
 		if (rc < 0) {
 			pr_err("%s: request_irq FAIL: %d\n", __func__, rc);
+			printk("BBox::UEC;22::6\n");
 			for (i = 0; i < tmdev->tsens_num_sensor; i++)
 				thermal_zone_device_unregister(
 					tmdev->sensor[i].tz_dev);
@@ -5953,6 +5958,7 @@ static int tsens_thermal_zone_register(struct tsens_tm_device *tmdev)
 			"tsens_interrupt", tmdev);
 		if (rc < 0) {
 			pr_err("%s: request_irq FAIL: %d\n", __func__, rc);
+			printk("BBox::UEC;22::6\n");
 			for (i = 0; i < tmdev->tsens_num_sensor; i++)
 				thermal_zone_device_unregister(
 					tmdev->sensor[i].tz_dev);
@@ -5988,6 +5994,7 @@ static int _tsens_register_thermal(void)
 		rc = tsens_thermal_zone_register(tmdev);
 		if (rc) {
 			pr_err("Error registering the thermal zone\n");
+			printk("BBox::UEC;22::4\n");
 			return rc;
 		}
 	}

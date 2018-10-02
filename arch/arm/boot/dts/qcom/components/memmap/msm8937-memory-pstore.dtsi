@@ -1,0 +1,15 @@
+/*
+  FIH pstore memory setting
+*/
+
+/* ref: msm8937.dtsi */
+
+/ {
+	reserved-memory {
+		pstore_reserve_mem: pstore_reserve_mem_region@0 {
+			compatible = "removed-dma-pool";
+			no-map;
+			reg = <0 0xC3B00000 0 0x00100000>;
+		};
+	};
+};

@@ -1,0 +1,47 @@
+&pmi8950_gpios {
+        /delete-property/ compatible;
+        compatible = "qcom,leds-gpio1";
+        gpio@c000 {
+                status = "okay";
+                qcom,led-name = "led:gpio1";
+                pwms = <&pmi8950_pwm 0 0>;
+        };
+        /delete-node/ gpio@c100;
+        };
+
+&pmi8950_pwm {
+        status = "okay";
+};
+
+&soc {
+        leds {
+                compatible = "gpio-leds";
+                status = "okay";
+                pinctrl-names = "default";
+                pinctrl-0 = <&gpio_led_off>;
+
+                rled {
+                        gpios = <&tlmm 0 0>;
+                        label = "red";
+                        linux,default-trigger = "none";
+                        default-state = "keep";
+                        retain-state-suspended;
+                };
+
+                gled {
+                        gpios = <&tlmm 1 0>;
+                        label = "green";
+                        linux,default-trigger = "none";
+                        default-state = "keep";
+                        retain-state-suspended;
+                };
+
+                bled {
+                        gpios = <&tlmm 2 0>;
+                        label = "blue";
+                        linux,default-trigger = "none";
+                        default-state = "keep";
+                        retain-state-suspended;
+                };
+        };
+};

@@ -79,6 +79,28 @@
 	_adc_val = (u8)((_current) * 100 / 976);	\
 }
 
+#define BBS_LOG 1
+#ifdef BBS_LOG
+#define QPNPFG_PROBE_ERROR do {printk("BBox;%s: Probe error\n", __func__); printk("BBox::UEC;12::0\n");} while (0)
+
+#define QPNPFG_READ_ERROR	do {printk("BBox;%s: fg read failed\n", __func__); printk("BBox::UEC;12::2\n");} while (0)
+#define QPNPFG_WRITE_ERROR	do {printk("BBox;%s: fg write failed\n", __func__); printk("BBox::UEC;12::3\n");} while (0)
+
+#define QPNPFG_BATTERY_SHUTDOWN_TEMP do {printk("BBox;%s: Battery temp reach shutdown temp\n", __func__); printk("BBox::UEC;49::1\n");} while (0)
+#define QPNPFG_BATTERY_VOLTAGE_LOW do {printk("BBox;%s: Voltage low\n", __func__); printk("BBox::UEC;49::3\n");} while (0)
+#endif
+
+#ifdef CONFIG_FIH_MT_SLEEP
+static unsigned long tm_entry_sec = 0, tm_exit_sec = 0, tm_diff_sec = 0;
+static int64_t shdw_cc_uah_suspend = 0, shdw_cc_uah_resume = 0;
+static int sc_mode = 0;
+int64_t update_cc_charge_value = 0;
+
+static unsigned long pc_tm_start_sec, pc_tm_end_sec;
+static int pwc_mode =0;
+static int64_t  shdw_cc_uah_pc_start, shdw_cc_uah_pc_end;
+#endif
+
 /* Debug Flag Definitions */
 enum {
 	FG_SPMI_DEBUG_WRITES		= BIT(0), /* Show SPMI writes */
@@ -221,6 +243,7 @@ enum fg_mem_data_index {
 	FG_DATA_BATT_SOC,
 	FG_DATA_CC_CHARGE,
 	FG_DATA_VINT_ERR,
+	FG_DATA_ACTUAL_CAPACITY_MAH, //   add for sleep current
 	FG_DATA_CPRED_VOLTAGE,
 	/* values below this only gets read once per profile reload */
 	FG_DATA_BATT_ID,
@@ -238,9 +261,9 @@ enum fg_mem_data_index {
 static struct fg_mem_setting settings[FG_MEM_SETTING_MAX] = {
 	/*       ID                    Address, Offset, Value*/
 	SETTING(SOFT_COLD,       0x454,   0,      100),
-	SETTING(SOFT_HOT,        0x454,   1,      400),
-	SETTING(HARD_COLD,       0x454,   2,      50),
-	SETTING(HARD_HOT,        0x454,   3,      450),
+	SETTING(SOFT_HOT,        0x454,   1,      450),
+	SETTING(HARD_COLD,       0x454,   2,      0),
+	SETTING(HARD_HOT,        0x454,   3,      550),
 	SETTING(RESUME_SOC,      0x45C,   1,      0),
 	SETTING(BCL_LM_THRESHOLD, 0x47C,   2,      50),
 	SETTING(BCL_MH_THRESHOLD, 0x47C,   3,      752),
@@ -273,6 +296,7 @@ static struct fg_mem_data fg_data[FG_DATA_MAX] = {
 	DATA(BATT_SOC,        0x56C,   1,      3,     -EINVAL),
 	DATA(CC_CHARGE,       0x570,   0,      4,     -EINVAL),
 	DATA(VINT_ERR,        0x560,   0,      4,     -EINVAL),
+	DATA(ACTUAL_CAPACITY_MAH, 0x578, 2,    2,	  -EINVAL),
 	DATA(CPRED_VOLTAGE,   0x540,   0,      2,     -EINVAL),
 	DATA(BATT_ID,         0x594,   1,      1,     -EINVAL),
 	DATA(BATT_ID_INFO,    0x594,   3,      1,     -EINVAL),
@@ -310,6 +334,8 @@ static struct fg_mem_data fg_backup_regs[FG_BACKUP_MAX] = {
 	BACKUP(MAH_TO_SOC,	0x4A0,   0,      4,     -EINVAL),
 };
 
+static int fih_info = 0;
+static int fih_turn_on_QC_log = 0;
 static int fg_debug_mask;
 module_param_named(
 	debug_mask, fg_debug_mask, int, S_IRUSR | S_IWUSR
@@ -330,7 +356,7 @@ module_param_named(
 	battery_type, fg_batt_type, charp, S_IRUSR | S_IWUSR
 );
 
-static int fg_sram_update_period_ms = 30000;
+static int fg_sram_update_period_ms = 20000;
 module_param_named(
 	sram_update_period_ms, fg_sram_update_period_ms, int, S_IRUSR | S_IWUSR
 );
@@ -565,6 +591,16 @@ struct fg_chip {
 	int			status;
 	int			prev_status;
 	int			health;
+	int			pre_temperature; //   add for temperature change
+	int			pre_capacity; //   add for capacity change
+	int			fake_fcc; //   add for FIH Reqe
+	int			fake_cc; //   add for FIH Reqe
+	int			fih_ftm_deepsleep; //   add for sleepcurrent in BB1
+	int			fih_comp_set_fun; //   add for different comp setting
+	int			fih_vfloat_comp_high; //   add for different comp setting
+	int			fih_vfloat_comp_low; //   add for different comp setting
+	int			fih_icurrent_comp_high; //   add for different comp setting
+	int			fih_icurrent_comp_low; //   add for different comp setting
 	enum fg_batt_aging_mode	batt_aging_mode;
 	struct alarm		hard_jeita_alarm;
 	/* capacity learning */
@@ -638,6 +674,9 @@ struct fg_chip {
 	bool			batt_info_restore;
 	bool			*batt_range_ocv;
 	int			*batt_range_pct;
+
+	struct delayed_work	fih_thermal_control_work; //  add for thermal control
+	struct fg_wakeup_source	fih_thermal_wakeup_source; //  add for thermal control
 };
 
 /* FG_MEMIF DEBUGFS structures */
@@ -730,6 +769,9 @@ static int fg_write(struct fg_chip *chip, u8 *val, u16 addr, int len)
 	if ((addr & 0xff00) == 0) {
 		pr_err("addr cannot be zero base=0x%02x sid=0x%02x rc=%d\n",
 			addr, spmi->sid, rc);
+#ifdef BBS_LOG
+		QPNPFG_WRITE_ERROR;
+#endif
 		return -EINVAL;
 	}
 
@@ -737,6 +779,9 @@ static int fg_write(struct fg_chip *chip, u8 *val, u16 addr, int len)
 	if (rc) {
 		pr_err("write failed addr=0x%02x sid=0x%02x rc=%d\n",
 			addr, spmi->sid, rc);
+#ifdef BBS_LOG
+		QPNPFG_WRITE_ERROR;
+#endif
 		return rc;
 	}
 
@@ -759,6 +804,9 @@ static int fg_read(struct fg_chip *chip, u8 *val, u16 addr, int len)
 	if ((addr & 0xff00) == 0) {
 		pr_err("base cannot be zero base=0x%02x sid=0x%02x rc=%d\n",
 			addr, spmi->sid, rc);
+#ifdef BBS_LOG
+		QPNPFG_READ_ERROR;
+#endif
 		return -EINVAL;
 	}
 
@@ -774,6 +822,9 @@ static int fg_read(struct fg_chip *chip, u8 *val, u16 addr, int len)
 		fill_string(str, DEBUG_PRINT_BUFFER_SIZE, val, len);
 		pr_info("read(0x%04x), sid=%d, len=%d; %s\n",
 			addr, spmi->sid, len, str);
+#ifdef BBS_LOG
+		QPNPFG_READ_ERROR;
+#endif
 	}
 
 	return rc;
@@ -1127,10 +1178,20 @@ static int fg_conventional_mem_write(struct fg_chip *chip, u8 *val, u16 address,
 	char str[DEBUG_PRINT_BUFFER_SIZE];
 
 	if (address < RAM_OFFSET)
+	{
+#ifdef BBS_LOG
+		QPNPFG_WRITE_ERROR;
+#endif
 		return -EINVAL;
+	}
 
 	if (offset > 3)
+	{
+#ifdef BBS_LOG
+		QPNPFG_WRITE_ERROR;
+#endif
 		return -EINVAL;
+	}
 
 	address = ((orig_address + offset) / 4) * 4;
 	offset = (orig_address + offset) % 4;
@@ -1224,6 +1285,10 @@ out:
 	}
 
 	mutex_unlock(&chip->rw_lock);
+#ifdef BBS_LOG
+	if(rc)
+		QPNPFG_WRITE_ERROR;
+#endif
 	return rc;
 }
 
@@ -1736,10 +1801,18 @@ static int fg_interleaved_mem_read(struct fg_chip *chip, u8 *val, u16 address,
 	bool retry = false;
 
 	if (chip->fg_shutdown)
+	{
+#ifdef BBS_LOG
+		QPNPFG_READ_ERROR;
+#endif
 		return -EINVAL;
+	}
 
 	if (offset > 3) {
 		pr_err("offset too large %d\n", offset);
+#ifdef BBS_LOG
+		QPNPFG_READ_ERROR;
+#endif
 		return -EINVAL;
 	}
 
@@ -1838,6 +1911,10 @@ out:
 	mutex_unlock(&chip->rw_lock);
 exit:
 	fg_relax(&chip->memif_wakeup_source);
+#ifdef BBS_LOG
+	if(rc)
+		QPNPFG_READ_ERROR;
+#endif
 	return rc;
 }
 
@@ -1849,13 +1926,26 @@ static int fg_interleaved_mem_write(struct fg_chip *chip, u8 *val, u16 address,
 	bool retry = false;
 
 	if (chip->fg_shutdown)
+	{
+#ifdef BBS_LOG
+		QPNPFG_WRITE_ERROR;
+#endif
 		return -EINVAL;
+	}
 
 	if (address < RAM_OFFSET)
+	{
+#ifdef BBS_LOG
+		QPNPFG_WRITE_ERROR;
+#endif
 		return -EINVAL;
-
+	}
+	
 	if (offset > 3) {
 		pr_err("offset too large %d\n", offset);
+#ifdef BBS_LOG
+		QPNPFG_WRITE_ERROR;
+#endif
 		return -EINVAL;
 	}
 
@@ -1910,6 +2000,10 @@ out:
 
 	mutex_unlock(&chip->rw_lock);
 	fg_relax(&chip->memif_wakeup_source);
+#ifdef BBS_LOG
+	if(rc)
+		QPNPFG_WRITE_ERROR;
+#endif
 	return rc;
 }
 
@@ -2008,6 +2102,7 @@ static int fg_reset(struct fg_chip *chip, bool reset)
 {
 	int rc;
 
+	printk("BBox::UPD;72::%d\n", reset);
 	rc = fg_sec_masked_write(chip, chip->soc_base + SOC_FG_RESET,
 		0xFF, reset ? RESET_MASK : 0, 1);
 	if (rc)
@@ -2259,8 +2354,14 @@ static int get_prop_capacity(struct fg_chip *chip)
 		return MISSING_CAPACITY;
 
 	if (!chip->profile_loaded && !chip->use_otp_profile)
-		return DEFAULT_CAPACITY;
-
+        /*modified by john for power off charging animation 50%(PLE-1067) @2017/3/8 begin*/
+        {
+            //return DEFAULT_CAPACITY;
+            msoc = get_monotonic_soc_raw(chip);
+            return DIV_ROUND_CLOSEST((msoc - 1) * (FULL_CAPACITY - 2),
+                    FULL_SOC_RAW - 2) + 1;
+        }
+        /*modified by john for power off charging animation 50%(PLE-1067) @2017/3/8 end*/
 	if (chip->charge_full)
 		return FULL_CAPACITY;
 
@@ -2268,6 +2369,7 @@ static int get_prop_capacity(struct fg_chip *chip)
 		if (fg_debug_mask & FG_POWER_SUPPLY)
 			pr_info_ratelimited("capacity: %d, EMPTY\n",
 					EMPTY_CAPACITY);
+		pr_info("capacity: %d, EMPTY\n", EMPTY_CAPACITY);
 		return EMPTY_CAPACITY;
 	}
 
@@ -2614,6 +2716,9 @@ static int update_sram_data(struct fg_chip *chip, int *resched_ms)
 			fg_data[i].value = div64_s64(temp * chip->nom_cap_uah,
 					FULL_PERCENT_3B);
 			break;
+		case FG_DATA_ACTUAL_CAPACITY_MAH:
+			fg_data[i].value = temp;
+			break;	
 		};
 
 		if (fg_debug_mask & FG_MEM_DEBUG_READS)
@@ -2744,6 +2849,361 @@ out:
 			msecs_to_jiffies(resched_ms));
 }
 
+//   add for different comp setting {{
+static const int fcc_icomp_table_8952[] = {
+	250,
+	700,
+	900,
+	1200,
+};
+#define FCC_ICOMP_MASK 	(BIT(1) | BIT(0))
+#define FV_VCOMP_MASK		(BIT(5) | BIT(4) | BIT(3) | BIT(2) | BIT(1) |BIT(0))
+#define FIH_VCOMP_DEFAULT			16
+#define FIH_ICOMP_DEFAULT			700
+#define JEITA_COMP_TEMP_THRESHOLD 300
+int fih_diff_jeita_comp_set(struct fg_chip *chip, int temp)
+{
+	int icomp_val = FIH_ICOMP_DEFAULT;
+	int vcomp_val = FIH_VCOMP_DEFAULT;
+	int i = 0, val =0;
+	int rc =0;
+
+	u8 reg10f3, reg10f5;
+	
+	if(chip->fih_comp_set_fun != 1)
+		return 0;
+
+	if(temp >= JEITA_COMP_TEMP_THRESHOLD) // temp >= 30.0 degC, (45+15)/2 = 30
+	{
+		icomp_val = chip->fih_icurrent_comp_high;
+		vcomp_val = chip->fih_vfloat_comp_high;
+	}
+	else if(temp < JEITA_COMP_TEMP_THRESHOLD) // temp < 30.0 degC
+	{
+		icomp_val = chip->fih_icurrent_comp_low;
+		vcomp_val = chip->fih_vfloat_comp_low;
+	}
+
+	for (i = 0; i < 4; i++)
+		if (icomp_val == fcc_icomp_table_8952[i])
+			break;
+
+	if (i >= 4)
+		i=3;
+
+	val = vcomp_val & FV_VCOMP_MASK;
+	
+	rc = fg_sec_masked_write(chip, 0x10f3, FCC_ICOMP_MASK, i, 1);
+	rc = fg_sec_masked_write(chip, 0x10f5, FV_VCOMP_MASK, val, 1);
+
+	rc = fg_read(chip, &reg10f3, 0x10f3, 1);
+	rc = fg_read(chip, &reg10f5, 0x10f5, 1);
+	pr_debug("reg10f3=0x%x, reg10f5=0x%x  \n", reg10f3, reg10f5);
+	return rc;
+}
+//   add for different comp setting }}
+
+//   add for temperature changed {{
+void fih_temp_check(struct fg_chip *chip)
+{
+	int temp_now;
+
+	temp_now = fg_data[FG_DATA_BATT_TEMP].value;
+	pr_debug("temp_now=%d, temp_pre=%d\n", temp_now, chip->pre_temperature);
+	if(temp_now > chip->pre_temperature)
+	{
+		if((temp_now - chip->pre_temperature)>=10)
+		{
+			chip->pre_temperature = temp_now;			
+			fih_diff_jeita_comp_set(chip, temp_now); //   add for different comp setting
+			if (chip->power_supply_registered && chip->batt_psy)
+				power_supply_changed(chip->batt_psy);
+		}
+		else if(temp_now >= 600) // shutdown temp
+		{
+			if (chip->power_supply_registered && chip->batt_psy)
+				power_supply_changed(chip->batt_psy);
+#ifdef BBS_LOG
+				QPNPFG_BATTERY_SHUTDOWN_TEMP;
+#endif
+		}
+	}
+	else
+	{
+		if((chip->pre_temperature - temp_now)>=10)
+		{
+			chip->pre_temperature = temp_now;
+			fih_diff_jeita_comp_set(chip, temp_now); //   add for different comp setting
+			if (chip->power_supply_registered && chip->batt_psy)
+				power_supply_changed(chip->batt_psy);
+		}
+		else if(temp_now >= 600) // shutdown temp
+		{
+			if (chip->power_supply_registered && chip->batt_psy)
+				power_supply_changed(chip->batt_psy);
+#ifdef BBS_LOG
+				QPNPFG_BATTERY_SHUTDOWN_TEMP;
+#endif
+		}
+	}
+}
+//   add for  temperature changed  }}
+//   add for capacity changed {{
+void fih_capacity_check(struct fg_chip *chip, int capacity, int voltage, int u_present, int u_online)
+{
+	static int low_voltage =0;
+#ifdef BBS_LOG
+	static int bbs_vol_low =0;
+#endif
+
+	pr_debug("capacity_now=%d, capacity_pre=%d, \n", capacity, chip->pre_capacity);
+	if(capacity != chip->pre_capacity)
+	{	
+		low_voltage =0;
+		chip->pre_capacity = capacity;
+		if (chip->power_supply_registered && chip->batt_psy)
+			power_supply_changed(chip->batt_psy);	
+	}
+	else
+	{
+		// For JGR-5657, battery =0 but voltage > 3400mA
+		if(capacity == 0 && voltage <= settings[FG_MEM_CUTOFF_VOLTAGE].value && low_voltage < 2)
+		{
+			pr_err("send power charng for shutdown\n");
+			low_voltage = low_voltage + 1;
+			power_supply_changed(chip->batt_psy);
+		}
+	}
+#ifdef BBS_LOG
+	if(voltage <= 3000 && bbs_vol_low == 0)
+	{
+		QPNPFG_BATTERY_VOLTAGE_LOW;
+		bbs_vol_low = 1;
+		pr_err("usb present =%d, usb online = %d\n", u_present, u_online);
+	}
+#endif
+}
+//   add for capacity changed  }}
+#define FIH_FALL_VOLTAGE		4335
+#define CHG_INHIBIT_BIT			BIT(1)
+#define BAT_TCC_REACHED_BIT		BIT(7)
+#define CHG_ENABLE_STS			0x0E
+int fih_check_full_capacity_for_usbin_uv(struct fg_chip *chip, int b_lvl, int b_voltage, int b_status, int charge_sts, int chg_rt_sts)
+{
+	union power_supply_propval prop = {0,};
+	int u_present =0, u_online =0, u_healthd=0;
+	
+	if(b_lvl != 100)
+		return 0;
+	if(b_voltage >=FIH_FALL_VOLTAGE || chip->charge_full != true || chip->status != POWER_SUPPLY_STATUS_FULL) // 4400 full, 4350 re-charging
+		return 0;
+
+	if (!chip->usb_psy)
+		chip->usb_psy = power_supply_get_by_name("usb");
+
+	if (!chip->usb_psy)
+		return 0;
+	
+	chip->usb_psy->get_property(chip->usb_psy,
+			POWER_SUPPLY_PROP_PRESENT, &prop);
+	u_present = prop.intval;
+	chip->usb_psy->get_property(chip->usb_psy,
+			POWER_SUPPLY_PROP_ONLINE, &prop);
+	u_online = prop.intval;
+	chip->usb_psy->get_property(chip->usb_psy,
+			POWER_SUPPLY_PROP_HEALTH, &prop);
+	u_healthd = prop.intval;
+
+	if(u_present ==1 && u_online ==0 && u_healthd ==POWER_SUPPLY_HEALTH_UNSPEC_FAILURE)
+	{
+		pr_err("FIH check, weak charger!!!!!\n");
+		if((chg_rt_sts & CHG_INHIBIT_BIT) !=0 ||(chg_rt_sts & BAT_TCC_REACHED_BIT) !=0)
+		{
+			pr_err("FIH check, battery full status, return OK \n");
+			return 0;
+		}
+
+		if((charge_sts & CHG_ENABLE_STS) ==0 && 
+			(b_status !=POWER_SUPPLY_STATUS_DISCHARGING) && (b_status !=POWER_SUPPLY_STATUS_UNKNOWN))
+		{
+			pr_err("FIH check, set chip->status, status is POWER_SUPPLY_STATUS_DISCHARGING \n");
+			chip->prev_status = chip->status;
+			chip->status = POWER_SUPPLY_STATUS_DISCHARGING;
+			schedule_work(&chip->status_change_work);
+			schedule_work(&chip->charge_full_work);
+			return 2;
+		}
+		else
+		{
+			if((charge_sts & CHG_ENABLE_STS) ==0 && 
+				chip->charge_full && b_status ==POWER_SUPPLY_STATUS_DISCHARGING)
+			{
+				pr_err("FIH check, set fg status to dischg if batt status is dischg, charge_full is true \n");
+				chip->prev_status = chip->status;
+				chip->status = POWER_SUPPLY_STATUS_DISCHARGING;
+				schedule_work(&chip->status_change_work);
+				schedule_work(&chip->charge_full_work);
+				return 2;
+			}
+		}
+	}
+	return 1;
+}
+
+extern int sensor_get_temp(uint32_t sensor_id, long *temp);
+extern void fih_thermal_cable_voltage_control(void);
+#define CASE_THERM_CH 4
+#define PMIC_CH 17
+#define PA0_CH 18
+//   add for dump info {{
+int fih_dump_info(struct fg_chip *chip)
+{
+	union power_supply_propval prop = {0, };
+	int rc =0;
+	int b_status, cg_enabled, bcg_enabled;
+	int fg_capa, fg_c_now, fg_v_now, fg_temp, fg_id_ohm;
+
+	u8 reg100c, reg100d, reg100e, reg1010, reg10f2, reg10f3, reg10f5, reg10fa, reg10fd;
+	u8 reg1210, reg1242;
+	u8 reg1307, reg1308, reg1309, reg130a, reg130b, reg130c, reg130d, reg1340, reg13f2, reg13f3, reg13f4, reg13f5;
+	u8 reg1608, reg1610;
+	static u8 print_info=0;
+	int cg_cur;
+	int u_present, u_online, u_v_now, u_type;
+	long case_therm, pmic, pa0;
+
+	//   add for deepsleep
+	if(chip->fih_ftm_deepsleep == 2)
+		return 0;
+
+	if(print_info == 1)
+	{
+		print_info =0;
+		return 0;
+	}
+	else
+		print_info = 1;
+
+	if (!chip->batt_psy)
+		chip->batt_psy = power_supply_get_by_name("battery");
+	else if (!chip->usb_psy)
+		chip->usb_psy = power_supply_get_by_name("usb");
+
+// battery
+	if (chip->batt_psy)
+	{
+		chip->batt_psy->get_property(chip->batt_psy,
+				POWER_SUPPLY_PROP_STATUS, &prop);
+		b_status = prop.intval;
+		chip->batt_psy->get_property(chip->batt_psy,
+				POWER_SUPPLY_PROP_CHARGING_ENABLED, &prop);
+		cg_enabled = prop.intval;
+		chip->batt_psy->get_property(chip->batt_psy,
+				POWER_SUPPLY_PROP_BATTERY_CHARGING_ENABLED, &prop);
+		bcg_enabled = prop.intval;
+		chip->batt_psy->get_property(chip->batt_psy,
+				POWER_SUPPLY_PROP_INPUT_CURRENT_NOW, &prop);
+		cg_cur = prop.intval;
+	}
+	else
+	{
+		b_status = 0;
+		cg_enabled = 0;
+		bcg_enabled = 0;
+	}
+
+// usb
+	if (chip->usb_psy)
+	{
+		chip->usb_psy->get_property(chip->usb_psy,
+				POWER_SUPPLY_PROP_PRESENT, &prop);
+		u_present = prop.intval;
+		chip->usb_psy->get_property(chip->usb_psy,
+			POWER_SUPPLY_PROP_ONLINE, &prop);
+		u_online = prop.intval;
+		chip->usb_psy->get_property(chip->usb_psy,
+			POWER_SUPPLY_PROP_VOLTAGE_NOW, &prop);
+		u_v_now = prop.intval;
+		chip->usb_psy->get_property(chip->usb_psy,
+			POWER_SUPPLY_PROP_TYPE, &prop);
+		u_type = prop.intval;
+	}
+
+// fg
+	fg_capa = get_prop_capacity(chip);
+	fg_c_now = get_sram_prop_now(chip, FG_DATA_CURRENT);
+	fg_v_now = get_sram_prop_now(chip, FG_DATA_VOLTAGE);
+	fg_temp = get_sram_prop_now(chip, FG_DATA_BATT_TEMP);
+	fg_id_ohm = get_sram_prop_now(chip, FG_DATA_BATT_ID);
+
+// check capacity
+	fih_capacity_check(chip, fg_capa, (fg_v_now/1000), u_present, u_online);
+// register
+	rc = fg_read(chip, &reg100c, 0x100c, 1);
+	rc = fg_read(chip, &reg100d, 0x100d, 1);
+	rc = fg_read(chip, &reg100e, 0x100e, 1);
+	rc = fg_read(chip, &reg1010, 0x1010, 1);
+	rc = fg_read(chip, &reg10f2, 0x10f2, 1);
+	rc = fg_read(chip, &reg10f3, 0x10f3, 1);
+	rc = fg_read(chip, &reg10f5, 0x10f5, 1);
+	rc = fg_read(chip, &reg10fa, 0x10fa, 1);
+	rc = fg_read(chip, &reg10fd, 0x10fd, 1);
+
+	rc = fg_read(chip, &reg1210, 0x1210, 1);
+	rc = fg_read(chip, &reg1242, 0x1242, 1);
+
+	rc = fg_read(chip, &reg1307, 0x1307, 1);
+	rc = fg_read(chip, &reg1308, 0x1308, 1);
+	rc = fg_read(chip, &reg1309, 0x1309, 1);
+	rc = fg_read(chip, &reg130a, 0x130a, 1);
+	rc = fg_read(chip, &reg130b, 0x130b, 1);
+	rc = fg_read(chip, &reg130c, 0x130c, 1);
+	rc = fg_read(chip, &reg130d, 0x130d, 1);
+	rc = fg_read(chip, &reg1340, 0x1340, 1);
+	rc = fg_read(chip, &reg13f2, 0x13f2, 1);
+	rc = fg_read(chip, &reg13f3, 0x13f3, 1);
+	rc = fg_read(chip, &reg13f4, 0x13f4, 1);
+	rc = fg_read(chip, &reg13f5, 0x13f5, 1);
+
+	rc = fg_read(chip, &reg1608, 0x1608, 1);
+	rc = fg_read(chip, &reg1610, 0x1610, 1);
+
+	fih_check_full_capacity_for_usbin_uv(chip, fg_capa, (fg_v_now/1000), b_status, reg100e, reg1010);
+
+// pmic & quiet therm temp
+	sensor_get_temp(CASE_THERM_CH, &case_therm);
+	sensor_get_temp(PMIC_CH, &pmic);
+	sensor_get_temp(PA0_CH, &pa0);
+
+	if(fih_info)
+	{
+		pr_err("UTP:%d,BEN:%d,CEN:%d,STS:%d,TMP:%d,VBAT:%d,IBAT:%d,CAP:%d,UVL:%d,ICN:%d,ID:%d,CT:%ld,PMIC:%ld,PA0:%ld\n",
+		u_type, bcg_enabled, cg_enabled, b_status, fg_temp, fg_v_now, fg_c_now, fg_capa, u_v_now, cg_cur, fg_id_ohm, case_therm, pmic, pa0);
+
+		pr_err("C:S%xS%xS%xS%xF%xF%xF%xS%x, BI:S%xC%x, U:S%xS%xS%xS%xS%xS%xS%xC%xC%xC%xC%xC%x, M:S%xS%x\n",
+		reg100c, reg100d, reg100e, reg1010, reg10f2, reg10f3, reg10fa, reg10fd,
+		reg1210, reg1242,
+		reg1307, reg1308, reg1309, reg130a, reg130b, reg130c, reg130d, reg1340, reg13f2, reg13f3, reg13f4, reg13f5,
+		reg1608, reg1610);
+		fih_thermal_cable_voltage_control();
+	}
+	else
+	{
+		pr_err("U%dB%dC%dS%dT%dVB%dIB%dC%dUV%dIC%dID%dCT%ldPMIC%ld, B:S%xE%xE%x, F:L%dC%dV%dT%d, C:S%xS%xS%xS%xF%xF%xF%xF%x, BI:S%xC%x, U:S%xS%xS%xS%xS%xS%xS%xC%xC%xC%xC%xC%x, M:S%xS%x, TM:Q%ldP%ldP%ld\n",
+		u_type, bcg_enabled, cg_enabled, b_status, fg_temp, fg_v_now, fg_c_now, fg_capa, u_v_now, cg_cur, fg_id_ohm, case_therm, pmic,
+		b_status, cg_enabled, bcg_enabled,
+		fg_capa, fg_c_now, fg_v_now, fg_temp,
+		reg100c, reg100d, reg100e, reg1010, reg10f2, reg10f3, reg10f5, reg10fa,
+		reg1210, reg1242,
+		reg1307, reg1308, reg1309, reg130a, reg130b, reg130c, reg130d, reg1340, reg13f2, reg13f3, reg13f4, reg13f5,
+		reg1608, reg1610,
+		case_therm, pmic, pa0);
+	}
+	return rc;
+}
+//   add for dump info }}
+
+
 #define BATT_TEMP_OFFSET	3
 #define BATT_TEMP_CNTRL_MASK	0x17
 #define DISABLE_THERM_BIT	BIT(0)
@@ -2858,6 +3318,8 @@ out:
 	fg_relax(&chip->update_temp_wakeup_source);
 
 resched:
+	fih_temp_check(chip); //   add for  temperature changed
+	fih_dump_info(chip); //   add for dump info
 	schedule_delayed_work(
 		&chip->update_temp_work,
 		msecs_to_jiffies(TEMP_PERIOD_UPDATE_MS));
@@ -4625,7 +5087,15 @@ static int fg_power_get_property(struct power_supply *psy,
 		val->intval = get_sram_prop_now(chip, FG_DATA_BATT_ESR_COUNT);
 		break;
 	case POWER_SUPPLY_PROP_CYCLE_COUNT:
+//   add for FIH Reqe {{
+		if(chip->fake_cc != -1)
+		{
+			pr_err("FIH Test, get fake cc %d \n", chip->fake_cc);
+			val->intval = chip->fake_cc;
+		}
+		else
 		val->intval = fg_get_cycle_count(chip);
+//   add for FIH Reqe }}
 		break;
 	case POWER_SUPPLY_PROP_CYCLE_COUNT_ID:
 		val->intval = chip->cyc_ctr.id;
@@ -4646,7 +5116,15 @@ static int fg_power_get_property(struct power_supply *psy,
 		val->intval = chip->nom_cap_uah;
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_FULL:
+//   add for FIH Reqe {{
+		if(chip->fake_fcc != -1)
+		{
+			pr_err("FIH Test, get fake fcc %d \n", chip->fake_fcc);
+			val->intval = chip->fake_fcc;
+		}
+		else
 		val->intval = chip->learning_data.learned_cc_uah;
+//   add for FIH Reqe }}
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_NOW:
 		val->intval = chip->learning_data.cc_uah;
@@ -4812,6 +5290,14 @@ static int fg_power_set_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_BATTERY_INFO_ID:
 		chip->batt_info_id = val->intval;
 		break;
+//   add for FIH Reqe {{
+	case POWER_SUPPLY_PROP_CYCLE_COUNT:
+		chip->fake_cc = val->intval;
+		break;
+	case POWER_SUPPLY_PROP_CHARGE_FULL:
+		chip->fake_fcc = val->intval;
+		break;
+//   add for FIH Reqe }}
 	default:
 		return -EINVAL;
 	};
@@ -4828,6 +5314,8 @@ static int fg_property_is_writeable(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CYCLE_COUNT_ID:
 	case POWER_SUPPLY_PROP_BATTERY_INFO:
 	case POWER_SUPPLY_PROP_BATTERY_INFO_ID:
+	case POWER_SUPPLY_PROP_CHARGE_FULL: //   add for FIH REQE
+	case POWER_SUPPLY_PROP_CYCLE_COUNT://   add for FIH REQE
 		return 1;
 	default:
 		break;
@@ -5352,11 +5840,32 @@ static irqreturn_t fg_mem_avail_irq_handler(int irq, void *_chip)
 	return IRQ_HANDLED;
 }
 
+static void fih_thermal_control_work(struct work_struct *work)
+{
+	long case_therm;
+	struct fg_chip *chip = container_of(work,
+				struct fg_chip,
+				fih_thermal_control_work.work);
+
+	sensor_get_temp(CASE_THERM_CH, &case_therm);
+
+	pr_info("%s case_therm = %ld\n", __func__,case_therm);
+
+	fih_thermal_cable_voltage_control();
+
+	fg_relax(&chip->fih_thermal_wakeup_source);
+}
 static irqreturn_t fg_soc_irq_handler(int irq, void *_chip)
 {
 	struct fg_chip *chip = _chip;
 	u8 soc_rt_sts;
 	int rc, msoc;
+
+	if(is_input_present(chip) && fih_info)
+	{
+		fg_stay_awake(&chip->fih_thermal_wakeup_source);
+		schedule_delayed_work(&chip->fih_thermal_control_work, 0);
+	}
 
 	rc = fg_read(chip, &soc_rt_sts, INT_RT_STS(chip->soc_base), 1);
 	if (rc) {
@@ -6320,6 +6829,21 @@ static int fg_batt_profile_init(struct fg_chip *chip)
 	const char *data, *batt_type_str;
 	bool tried_again = false, vbat_in_range, profiles_same;
 	u8 reg = 0;
+	int soft_hot = 0;
+	int soft_cold = 0;
+	int hard_hot = 0;
+	int hard_cold = 0;
+#ifdef BBS_LOG	
+	int batt_id =0;
+	int aging_cc =0;
+#endif
+	int term_ma=0;
+//   add for different comp setting {{
+	int	fih_vcomp_high;
+	int	fih_vcomp_low;
+	int	fih_icomp_high;
+	int	fih_icomp_low;
+//   add for different comp setting }}
 
 wait:
 	fg_stay_awake(&chip->profile_wakeup_source);
@@ -6439,6 +6963,129 @@ wait:
 		goto no_profile;
 	}
 
+//   add for BBoX battery ID {
+#ifdef BBS_LOG
+	rc = of_property_read_u32(profile_node,"qcom,batt-id-kohm",&batt_id);
+		if(rc)
+			pr_debug("no battery ID!!\n");
+		else
+			printk("BBox::UPD;0::%d\n", batt_id);
+#endif
+//   add for BBoX battery ID }
+
+//   add for 4 battery data }}
+	if (!of_find_property(chip->spmi->dev.of_node,
+					"qcom,cool-bat-decidegc", NULL)) {				
+		rc = of_property_read_u32(profile_node,"qcom,cool-bat-decidegc",&soft_cold);
+		if(rc)
+			pr_debug("no special temperature setting!!\n");
+		else
+			settings[FG_MEM_SOFT_COLD].value = soft_cold;
+	}
+//   add for 4 battery data {{
+
+/* WayneWCShiue - VZS-589 - [BAT] Battery temperature protection (Move JEITA settings to batteryData)*/
+	if (!of_find_property(chip->spmi->dev.of_node,
+					"qcom,warm-bat-decidegc", NULL)) {
+		rc = of_property_read_u32(profile_node,"qcom,warm-bat-decidegc",&soft_hot);
+		if(rc)
+			pr_debug("no special temperature setting!!\n");
+		else
+			settings[FG_MEM_SOFT_HOT].value = soft_hot;
+	}
+
+	if (!of_find_property(chip->spmi->dev.of_node,
+					"qcom,cold-bat-decidegc", NULL)) {
+		rc = of_property_read_u32(profile_node,"qcom,cold-bat-decidegc",&hard_cold);
+		if(rc)
+			pr_debug("no special temperature setting!!\n");
+		else
+			settings[FG_MEM_HARD_COLD].value = hard_cold;
+	}
+/* end VZS-589 */
+
+	if (!of_find_property(chip->spmi->dev.of_node,
+					"qcom,hot-bat-decidegc", NULL)) {
+		rc = of_property_read_u32(profile_node,"qcom,hot-bat-decidegc",&hard_hot);
+		if(rc)
+			pr_debug("no special temperature setting!!\n");
+		else
+			settings[FG_MEM_HARD_HOT].value = hard_hot;
+	}
+
+	if (of_find_property(profile_node,
+					"qcom,fg-chg-iterm-ma", NULL)) {
+		rc = of_property_read_u32(profile_node,"qcom,fg-chg-iterm-ma",&term_ma);
+		if(rc)
+			pr_debug("no special term_ma setting!!\n");
+		else
+			settings[FG_MEM_CHG_TERM_CURRENT].value = term_ma;
+	}
+
+	if (!of_find_property(chip->spmi->dev.of_node,
+					"fih,log-info", NULL)) {
+		rc = of_property_read_u32(profile_node,"fih,log-info",&fih_info);
+		if(rc)
+			pr_debug("no fih log info setting!!\n");
+	}
+
+	if (!of_find_property(chip->spmi->dev.of_node,
+					"fih,turn-on-QC-log", NULL)) {
+		rc = of_property_read_u32(profile_node,"fih,turn-on-QC-log",&fih_turn_on_QC_log);
+		if(rc)
+			pr_debug("no fih turn on QC log setting!!\n");
+	}
+
+//  add for different comp setting {{
+	chip->fih_vfloat_comp_high = FIH_VCOMP_DEFAULT;
+	chip->fih_vfloat_comp_low = FIH_VCOMP_DEFAULT;
+	chip->fih_icurrent_comp_high = FIH_ICOMP_DEFAULT;
+	chip->fih_icurrent_comp_low = FIH_ICOMP_DEFAULT;
+	if(chip->fih_comp_set_fun == 1)
+	{
+		pr_debug("use different jeita settings\n");
+		rc = of_property_read_u32(profile_node,
+				"qcom,high-float-voltage-comp", &fih_vcomp_high);
+		if (rc) {
+			ret = rc;
+		} else {
+			chip->fih_vfloat_comp_high = fih_vcomp_high;
+		}
+
+		rc = of_property_read_u32(profile_node,
+				"qcom,low-float-voltage-comp", &fih_vcomp_low);
+		if (rc) {
+			ret = rc;
+		} else {
+			chip->fih_vfloat_comp_low = fih_vcomp_low;
+		}
+
+		rc = of_property_read_u32(profile_node,
+				"qcom,high-fastchg-current-comp", &fih_icomp_high);
+		if (rc) {
+			ret = rc;
+		} else {
+			chip->fih_icurrent_comp_high = fih_icomp_high;
+		}
+
+		rc = of_property_read_u32(profile_node,
+				"qcom,low-fastchg-current-comp", &fih_icomp_low);
+		if (rc) {
+			ret = rc;
+		} else {
+			chip->fih_icurrent_comp_low = fih_icomp_low;
+		}		
+		pr_err("jeita settings: %d, %d, %d, %d \n",chip->fih_vfloat_comp_high, chip->fih_vfloat_comp_low, chip->fih_icurrent_comp_high, chip->fih_icurrent_comp_low);
+	}
+	else
+	{
+		pr_err("use PMIC jeita\n");
+	}
+//   add for different comp setting }}
+
+	if(fih_turn_on_QC_log)
+		fg_debug_mask = 0xC4;
+
 	if (!chip->batt_profile)
 		chip->batt_profile = devm_kzalloc(chip->dev,
 				sizeof(char) * len, GFP_KERNEL);
@@ -6465,6 +7112,9 @@ wait:
 
 	vbat_in_range = get_vbat_est_diff(chip)
 			< settings[FG_MEM_VBAT_EST_DIFF].value * 1000;
+
+	pr_info("%s VBAT_EST_DIFF delta = %d\n", __func__, settings[FG_MEM_VBAT_EST_DIFF].value * 1000);
+
 	profiles_same = memcmp(chip->batt_profile, data,
 					PROFILE_COMPARE_LEN) == 0;
 	if (reg & PROFILE_INTEGRITY_BIT) {
@@ -6594,6 +7244,25 @@ done:
 	pr_info("Battery SOC: %d, V: %duV\n", get_prop_capacity(chip),
 		fg_data[FG_DATA_VOLTAGE].value);
 	complete_all(&chip->fg_reset_done);
+
+#ifdef BBS_LOG
+	printk("BBox::UPD;49::%d\n", (chip->nom_cap_uah)/1000); //   add for BBS log
+	printk("BBox::UPD;50::%d::%lld\n", fg_get_cycle_count(chip), (chip->learning_data.learned_cc_uah)/1000); //   add for BBS log
+
+	if(chip->learning_data.learned_cc_uah < chip->nom_cap_uah)
+	{
+		aging_cc = div64_s64((chip->learning_data.learned_cc_uah*100),
+					chip->nom_cap_uah);
+		if(aging_cc < 70)
+			printk("BBox::UEC;49::2\n");
+
+	}
+#endif
+	cancel_delayed_work_sync(
+		&chip->update_jeita_setting);
+	schedule_delayed_work(
+		&chip->update_jeita_setting, 0);
+
 	return rc;
 no_profile:
 	chip->soc_reporting_ready = true;
@@ -7014,6 +7683,7 @@ static int fg_of_init(struct fg_chip *chip)
 	const char *data;
 	struct device_node *node = chip->spmi->dev.of_node;
 	u32 temp[2] = {0};
+	int	fih_comp_fun = 0; //   add for different comp setting
 
 	OF_READ_SETTING(FG_MEM_SOFT_HOT, "warm-bat-decidegc", rc, 1);
 	OF_READ_SETTING(FG_MEM_SOFT_COLD, "cool-bat-decidegc", rc, 1);
@@ -7116,6 +7786,15 @@ static int fg_of_init(struct fg_chip *chip)
 	chip->hold_soc_while_full = of_property_read_bool(
 			chip->spmi->dev.of_node,
 			"qcom,hold-soc-while-full");
+
+//   add for different comp setting {{
+	of_property_read_u32(node, "fih,high-low-comp-set", &fih_comp_fun);
+	if(fih_comp_fun == 1)
+		chip->fih_comp_set_fun = 1;
+	else
+		chip->fih_comp_set_fun = 0;
+//   add for different comp setting }}
+
 
 	sense_type = of_property_read_bool(chip->spmi->dev.of_node,
 					"qcom,ext-sense-type");
@@ -7296,6 +7975,11 @@ static int fg_init_irqs(struct fg_chip *chip)
 			enable_irq_wake(chip->soc_irq[FULL_SOC].irq);
 			chip->full_soc_irq_enabled = true;
 
+// FIHTDC, IdaChiang, add for QC case 02847234 {{
+			enable_irq_wake(chip->soc_irq[FULL_SOC].irq);
+			chip->full_soc_irq_enabled = true;
+// FIHTDC, IdaChiang, add for QC case 02847234 }}
+
 			if (!chip->use_vbat_low_empty_soc) {
 				rc = devm_request_irq(chip->dev,
 					chip->soc_irq[EMPTY_SOC].irq,
@@ -7470,6 +8154,7 @@ static void fg_cancel_all_works(struct fg_chip *chip)
 	cancel_delayed_work_sync(&chip->update_jeita_setting);
 	cancel_delayed_work_sync(&chip->check_empty_work);
 	cancel_delayed_work_sync(&chip->batt_profile_init);
+	cancel_delayed_work_sync(&chip->fih_thermal_control_work);//  add for thermal control
 	alarm_try_to_cancel(&chip->fg_cap_learning_alarm);
 	alarm_try_to_cancel(&chip->hard_jeita_alarm);
 	if (!chip->ima_error_handling)
@@ -8681,6 +9366,164 @@ done:
 	fg_cleanup(chip);
 }
 
+//   add for sleep current {{
+#ifdef CONFIG_FIH_MT_SLEEP
+int64_t fih_get_cc_value(struct fg_chip *chip)
+{
+	int i = 0, rc = 0;
+	u8 reg[4];
+	int64_t temp;
+	
+	rc = fg_mem_read(chip, reg, fg_data[FG_DATA_CC_CHARGE].address,
+		fg_data[FG_DATA_CC_CHARGE].len, fg_data[FG_DATA_CC_CHARGE].offset, 0);
+	if (rc) {
+		pr_err("Failed to read cc_change value in suspend!!\n");
+		return 0;
+	}
+
+	temp = 0;
+	for (i = 0; i < fg_data[FG_DATA_CC_CHARGE].len; i++)
+		temp |= reg[i] << (8 * i);
+
+	return temp;
+}
+
+static ssize_t get_fih_power_consumption(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	int64_t data1 = 0, data2 = 0;
+	int actual_capacity_mah = 0;
+	struct fg_chip *chip = dev_get_drvdata(dev);
+	
+	tm_diff_sec = pc_tm_end_sec - pc_tm_start_sec;
+	if (tm_diff_sec == 0) {
+		data2 = 0;
+		pr_warning("[POWER CONSUMPTION] No data!! Please start and Stop once!!\n");
+		return sprintf(buf, "-1\n");
+	} else {
+		actual_capacity_mah = get_sram_prop_now(chip, FG_DATA_ACTUAL_CAPACITY_MAH);
+		data1 = abs(shdw_cc_uah_pc_end - shdw_cc_uah_pc_start);
+		data2 = ((actual_capacity_mah * data1) * 60 * 60) / tm_diff_sec /FULL_PERCENT_28BIT;
+		pr_info("[%s] actual_capacity_mah : %d mah data1 = %lld data2 = %lld\n", __func__, actual_capacity_mah, data1,data2);
+	}
+	pr_info("[%s] time-diff:%lu, sleep current %lld uA\n", __func__, tm_diff_sec, data2);
+
+	return sprintf(buf, "%lld\n", data2*1000);
+}
+
+static ssize_t set_fih_power_consumption(struct device *dev,
+				struct device_attribute *attr, const char *buf,
+				size_t count)
+{
+	struct fg_chip *chip = dev_get_drvdata(dev);
+
+	if(buf[0] == '1') {
+		pwc_mode = 1;
+		pc_tm_end_sec = 0;
+		pc_tm_end_sec = 0;
+		shdw_cc_uah_pc_end = 0;
+		shdw_cc_uah_pc_start = fih_get_cc_value(chip);
+		get_current_time(&pc_tm_start_sec);
+
+		pr_warning("[POWER CONSUMPTION] START at %lu(%lld)\n", pc_tm_start_sec, shdw_cc_uah_pc_start);
+	} else {
+		if( pwc_mode ){
+			pwc_mode = 0;
+			shdw_cc_uah_pc_end = fih_get_cc_value(chip);
+			get_current_time(&pc_tm_end_sec);
+
+			pr_warning("[POWER CONSUMPTION] END at %lu(%lld)\n", pc_tm_end_sec, shdw_cc_uah_pc_end);
+		}
+	}
+
+	return count;
+}
+static DEVICE_ATTR(power_consumption, 0644,
+	get_fih_power_consumption, set_fih_power_consumption);
+
+static ssize_t set_fih_sleep_current(struct device *dev,
+			       struct device_attribute *attr, const char *buf,
+			       size_t count)
+{
+	if (buf[0] == '1') {
+		sc_mode = 1;
+		tm_exit_sec = 0;
+		tm_entry_sec = 0;
+		shdw_cc_uah_suspend = 0;
+		shdw_cc_uah_resume = 0;
+	} else {
+		sc_mode = 0;
+	}
+	return count;
+}
+
+static ssize_t get_fih_sleep_current(struct device *dev,
+			       struct device_attribute *attr, char *buf)
+{
+	int64_t data1 = 0, data2 = 0;
+	int actual_capacity_mah = 0;
+	struct fg_chip *chip = dev_get_drvdata(dev);
+
+	tm_diff_sec = tm_exit_sec - tm_entry_sec;
+	if (tm_diff_sec == 0) {
+		data2 = 0;
+	} else {
+		actual_capacity_mah = get_sram_prop_now(chip, FG_DATA_ACTUAL_CAPACITY_MAH);
+		data1 = abs(shdw_cc_uah_resume - shdw_cc_uah_suspend);
+		data2 = ((actual_capacity_mah * data1) * 60 * 60) / tm_diff_sec /FULL_PERCENT_28BIT;
+		pr_info("[%s] actual_capacity_mah : %d mah data1 = %lld data2 = %lld\n", __func__, actual_capacity_mah, data1,data2);
+	}
+	pr_info("[%s] time-diff:%lu, sleep current %lld uA\n", __func__, tm_diff_sec, data2);
+
+	return sprintf(buf, "%lld\n", data2*1000);
+}
+//   add for sleep current }}
+
+static DEVICE_ATTR(sleep_current, 0644,
+	get_fih_sleep_current, set_fih_sleep_current);
+
+int get_sleep_current_mode(void)
+{
+	return sc_mode;
+}
+EXPORT_SYMBOL(get_sleep_current_mode);
+#endif
+
+//   add for deepsleep {{
+static ssize_t get_disable_fg_log(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct fg_chip *chip = dev_get_drvdata(dev);
+
+	return sprintf(buf, "%d\n",chip->fih_ftm_deepsleep);
+}
+
+static ssize_t set_disable_fg_log(struct device *dev,
+				struct device_attribute *attr, const char *buf,
+				size_t count)
+{
+	struct fg_chip *chip = dev_get_drvdata(dev);
+
+	if(chip->fih_ftm_deepsleep != 0)
+	{
+		if(buf[0] == '1')
+		{
+			chip->fih_ftm_deepsleep = 2;
+			cancel_delayed_work(&chip->update_temp_work);
+		}
+		else
+		{
+			chip->fih_ftm_deepsleep = 1;
+			cancel_delayed_work_sync(&chip->update_temp_work);
+			schedule_delayed_work(&chip->update_temp_work, msecs_to_jiffies(TEMP_PERIOD_UPDATE_MS));
+		}
+	}
+	return count;
+}
+static DEVICE_ATTR(disable_fg_log, 0644,
+	get_disable_fg_log, set_disable_fg_log);
+//   add for deepsleep }}
+
 static int fg_probe(struct spmi_device *spmi)
 {
 	struct device *dev = &(spmi->dev);
@@ -8692,17 +9535,26 @@ static int fg_probe(struct spmi_device *spmi)
 
 	if (!spmi) {
 		pr_err("no valid spmi pointer\n");
+#ifdef BBS_LOG
+		QPNPFG_PROBE_ERROR;
+#endif
 		return -ENODEV;
 	}
 
 	if (!spmi->dev.of_node) {
 		pr_err("device node missing\n");
+#ifdef BBS_LOG
+		QPNPFG_PROBE_ERROR;
+#endif
 		return -ENODEV;
 	}
 
 	chip = devm_kzalloc(dev, sizeof(struct fg_chip), GFP_KERNEL);
 	if (chip == NULL) {
 		pr_err("Can't allocate fg_chip\n");
+#ifdef BBS_LOG
+		QPNPFG_PROBE_ERROR;
+#endif
 		return -ENOMEM;
 	}
 
@@ -8750,6 +9602,7 @@ static int fg_probe(struct spmi_device *spmi)
 	INIT_DELAYED_WORK(&chip->check_empty_work, check_empty_work);
 	INIT_DELAYED_WORK(&chip->batt_profile_init, batt_profile_init);
 	INIT_DELAYED_WORK(&chip->check_sanity_work, check_sanity_work);
+	INIT_DELAYED_WORK(&chip->fih_thermal_control_work, fih_thermal_control_work);//  add for thermal control
 	INIT_WORK(&chip->ima_error_recovery_work, ima_error_recovery_work);
 	INIT_WORK(&chip->rslow_comp_work, rslow_comp_work);
 	INIT_WORK(&chip->fg_cap_learning_work, fg_cap_learning_work);
@@ -8833,9 +9686,16 @@ static int fg_probe(struct spmi_device *spmi)
 		}
 	}
 
+	chip->pre_capacity = 50; //   add for capacity changed
+	chip->pre_temperature = DEFAULT_TEMP_DEGC;//   add for temperature changed
+	chip->fake_fcc = -1; //   add for FIH Reqe
+	chip->fake_cc = -1; //   add for FIH Reqe
 	rc = fg_detect_pmic_type(chip);
 	if (rc) {
 		pr_err("Unable to detect PMIC type rc=%d\n", rc);
+#ifdef BBS_LOG
+		QPNPFG_PROBE_ERROR;
+#endif
 		return rc;
 	}
 
@@ -8924,6 +9784,21 @@ static int fg_probe(struct spmi_device *spmi)
 		chip->revision[ANA_MAJOR], chip->revision[ANA_MINOR],
 		chip->pmic_subtype);
 
+#ifdef CONFIG_FIH_MT_SLEEP
+	device_create_file(chip->dev, &dev_attr_sleep_current);
+	device_create_file(chip->dev,	&dev_attr_power_consumption);
+#endif
+
+//   add for ftm mode {{
+	chip->fih_ftm_deepsleep= 0;
+	if(strstr(saved_command_line, "androidboot.mode=2")!=NULL)
+	{
+		chip->fih_ftm_deepsleep = 1;
+		device_create_file(chip->dev,	&dev_attr_disable_fg_log);
+		pr_info("ftm mode\n");
+	}
+//   add for ftm mode }}
+
 	return rc;
 
 power_supply_unregister:
@@ -8951,6 +9826,9 @@ of_init_fail:
 	wakeup_source_trash(&chip->fg_reset_wakeup_source.source);
 	wakeup_source_trash(&chip->cc_soc_wakeup_source.source);
 	wakeup_source_trash(&chip->sanity_wakeup_source.source);
+#ifdef BBS_LOG
+	QPNPFG_PROBE_ERROR;
+#endif
 	return rc;
 }
 
@@ -8987,6 +9865,14 @@ static int fg_suspend(struct device *dev)
 {
 	struct fg_chip *chip = dev_get_drvdata(dev);
 
+#ifdef CONFIG_FIH_MT_SLEEP
+	if (sc_mode == 1) {
+		shdw_cc_uah_suspend = fih_get_cc_value(chip);
+		get_current_time(&tm_entry_sec);
+		pr_info("[%s] entry sec: %lu, suspend_cc:%lld\n", __func__, tm_entry_sec, shdw_cc_uah_suspend);
+	}
+#endif
+
 	if (!chip->sw_rbias_ctrl)
 		return 0;
 
@@ -8999,6 +9885,22 @@ static int fg_suspend(struct device *dev)
 static int fg_resume(struct device *dev)
 {
 	struct fg_chip *chip = dev_get_drvdata(dev);
+
+#ifdef CONFIG_FIH_MT_SLEEP
+	if (sc_mode == 1) {
+		shdw_cc_uah_resume = fih_get_cc_value(chip);
+		get_current_time(&tm_exit_sec);
+		pr_info("[%s] exit sec: %lu, resume_cc:%lld\n", __func__, tm_exit_sec, shdw_cc_uah_resume);
+	}
+#endif
+
+	//   add for deepsleep
+	if(chip->fih_ftm_deepsleep == 2)
+	{
+		chip->fih_ftm_deepsleep = 1;
+		cancel_delayed_work_sync(&chip->update_temp_work);
+		schedule_delayed_work(&chip->update_temp_work, msecs_to_jiffies(TEMP_PERIOD_UPDATE_MS));
+	}
 
 	if (!chip->sw_rbias_ctrl)
 		return 0;

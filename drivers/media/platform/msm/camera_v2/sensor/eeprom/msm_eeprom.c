@@ -1518,7 +1518,7 @@ static int msm_eeprom_config32(struct msm_eeprom_ctrl_t *e_ctrl,
 		if (e_ctrl->userspace_probe == 0) {
 			pr_err("%s:%d Eeprom already probed at kernel boot",
 				__func__, __LINE__);
-			rc = -EINVAL;
+			rc = 0;
 			break;
 		}
 		if (e_ctrl->cal_data.num_data == 0) {
@@ -1691,7 +1691,7 @@ static int msm_eeprom_platform_probe(struct platform_device *pdev)
 		CDBG("qcom,i2c_freq_mode %d, rc %d\n",
 			e_ctrl->i2c_freq_mode, rc);
 		if (rc < 0) {
-			pr_err("%s qcom,i2c-freq-mode read fail. Setting to 0 %d\n",
+			pr_err("%s qcom,i2c-freq-mode read fail or not set. Setting to 0 (rc %d)\n",
 				__func__, rc);
 			e_ctrl->i2c_freq_mode = 0;
 		}

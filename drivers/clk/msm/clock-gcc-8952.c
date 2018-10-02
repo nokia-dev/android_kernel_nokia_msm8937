@@ -869,6 +869,9 @@ static struct rcg_clk blsp1_qup1_i2c_apps_clk_src = {
 
 static struct clk_freq_tbl ftbl_gcc_blsp1_2_qup1_4_spi_apps_clk[] = {
 	F( 960000,	xo,	10,	1,	2),
+#if defined( CONFIG_SHUB_ML630Q790 )
+	F( 2000000, gpll0,  10, 1,  40),
+#endif  /* #if defined( CONFIG_SHUB_ML630Q790 ) */
 	F( 4800000,	xo,	4,	0,	0),
 	F( 9600000,	xo,	2,	0,	0),
 	F( 16000000,	gpll0,	10,	1,	5),
@@ -1312,7 +1315,10 @@ static struct rcg_clk jpeg0_clk_src = {
 
 static struct clk_freq_tbl ftbl_gcc_camss_mclk0_2_clk[] = {
 	F( 19200000,	xo,	1,	0,	0),
+	F( 19200000,    gpll6,  1,  4,  225),
 	F( 24000000,	gpll6,	1,	1,	45),
+	F( 25000000,	gpll0,	16,	1,	2),
+	F( 27000000,	gpll6,	1,	1,	40),
 	F( 66670000,	gpll0,	12,	0,	0),
 	F_END
 };

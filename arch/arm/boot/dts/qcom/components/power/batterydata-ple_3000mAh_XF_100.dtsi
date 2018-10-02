@@ -1,0 +1,73 @@
+/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+qcom,fih-ple-4v4-3000mah-100k {
+	qcom,nom-batt-capacity-mah = <3000>;
+	qcom,max-voltage-uv = <4400000>;
+	qcom,v-cutoff-uv = <3300000>;
+	qcom,chg-term-ua = <100000>;
+	qcom,batt-id-kohm = <100>;
+	qcom,battery-type = "SCUD_XF";
+	qcom,cool-bat-decidegc = <150>;
+	qcom,battery-beta = <3380>;
+	qcom,chg-rslow-comp-c1 = <2783213>;
+	qcom,chg-rslow-comp-c2 = <3372267>;
+	qcom,chg-rs-to-rslow = <1906749>;
+	qcom,chg-rslow-comp-thr = <0x99>;
+	qcom,checksum = <0x28AF>;
+	qcom,gui-version = "PMI8950GUI - 2.0.0.16";
+
+	qcom,fastchg-current-ma = <2000>;
+	qcom,fastchg-current-comp = <1200>;
+
+	qcom,high-float-voltage-comp = <16>; /* need change to 16 if float-voltage change to 4.4 */
+	qcom,low-float-voltage-comp = <6>; /* 4.3 */
+	qcom,high-fastchg-current-comp = <1200>;
+	qcom,low-fastchg-current-comp = <700>;
+
+	qcom,fg-cc-cv-threshold-mv = <4390>;
+	qcom,thermal-coefficients = [C5 86 BE 50 D1 37];
+	qcom,fg-profile-data = [
+		 E0 83 D7 7C
+		 27 81 6C 77
+		 65 83 A3 74
+		 9A 89 96 94
+		 41 82 1D 99
+		 F8 B7 36 C8
+		 56 11 20 83
+		 A7 6A 97 6A
+		 F4 33 3F 83
+		 54 78 61 84
+		 A2 7B 83 82
+		 7C 93 5C B5
+		 2E C1 77 12
+		 43 0C A8 58
+		 14 70 71 FD
+		 68 3D D9 3D
+		 3F 29 00 00
+		 B0 46 D1 41
+		 3F 31 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 F0 73 F4 72
+		 C6 5D A5 82
+		 E8 6F 26 62
+		 AD 6D 54 70
+		 78 6D 07 59
+		 E7 75 07 A1
+		 24 B8 63 04
+		 64 A0 71 0C
+		 28 00 FF 36
+		 F0 11 30 03
+		 00 00 00 0C
+	];
+};

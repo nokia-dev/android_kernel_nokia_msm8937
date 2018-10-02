@@ -1,0 +1,12 @@
+/*elan FP */
+elan {
+	compatible = "elan,elan_fp";
+	input-device-name = "elan";
+        interrupt-parent = <&tlmm>;
+        interrupts = <48 0x0>;
+        elan,rst-gpio  = <&tlmm 89 0>;
+        elan,irq-gpio = <&tlmm 48 0>;
+        elan,tb-irq-gpio = <&tlmm 2 0>;
+
+        vdd_io-supply = <&fp_avdd_vreg>;
+};

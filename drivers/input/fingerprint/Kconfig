@@ -1,0 +1,12 @@
+#
+# Configuration for FPC
+#
+config FINGER_PRINT
+	bool "Finger Print Driver" 
+	default n
+	---help---
+	  This is a Finger Print Drive
+	  
+source "drivers/input/fingerprint/fpc1020/Kconfig"
+source "drivers/input/fingerprint/goodix_gfx18m/Kconfig"
+source "drivers/input/fingerprint/elan/Kconfig"

@@ -1,0 +1,175 @@
+/*
+ * Copyright (c) 2015, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&int_codec {
+	status = "okay";
+	qcom,model = "msm8952-snd-card-d1c";
+	qcom,msm-hs-micbias-type = "external";
+	qcom,msm-mbhc-hphl-swh = <1>;
+	qcom,msm-mbhc-gnd-swh = <1>;
+	qcom,msm-ear-switch-en = <&tlmm 62 0>;
+	qcom,msm-ear-switch-in = <&tlmm 63 0>;
+
+	qcom,audio-routing =
+	"RX_BIAS", "MCLK",
+	"SPK_RX_BIAS", "MCLK",
+	"INT_LDO_H", "MCLK",
+	"MIC BIAS External", "Handset Mic",
+	"MIC BIAS External2", "Headset Mic",
+	"MIC BIAS External", "Secondary Mic",
+	"AMIC1", "MIC BIAS External",
+	"AMIC2", "MIC BIAS External2",
+	"AMIC3", "MIC BIAS External";
+	qcom,msm-ext-pa = "quaternary";
+	fih,ext-spk-amp-support;
+
+		qcom,msm-gpios =
+			"pri_i2s",
+			"ear_switch",
+			"quat_i2s";
+		qcom,pinctrl-names =
+			"all_off",
+			"pri_i2s_act",
+			"ear_switch_act",
+			"pri_i2s_ear_switch_act",
+			"quat_act",
+			"quat_pri_i2s_act",
+			"quat_ear_switch_act",
+			"quat_ear_switch_pri_i2s_act";
+		pinctrl-names =
+			"all_off",
+			"pri_i2s_act",
+			"ear_switch_act",
+			"pri_i2s_ear_switch_act",
+			"quat_act",
+			"quat_pri_i2s_act",
+			"quat_ear_switch_act",
+			"quat_ear_switch_pri_i2s_act";
+	pinctrl-0 = <&cdc_pdm_lines_sus
+			&cdc_pdm_lines_2_sus &ear_sw_fih_sus
+			&sec_tlmm_lines_sus>;
+	pinctrl-1 = <&cdc_pdm_lines_act
+			&cdc_pdm_lines_2_act &ear_sw_fih_sus
+			&sec_tlmm_lines_sus>;
+	pinctrl-2 = <&cdc_pdm_lines_sus
+			&cdc_pdm_lines_2_sus &ear_sw_fih_act
+			&sec_tlmm_lines_sus>;
+	pinctrl-3 = <&cdc_pdm_lines_act
+			&cdc_pdm_lines_2_act &ear_sw_fih_act
+			&sec_tlmm_lines_sus>;
+	pinctrl-4 = <&cdc_pdm_lines_sus
+			&cdc_pdm_lines_2_sus &ear_sw_fih_sus
+			&sec_tlmm_lines_act>;
+	pinctrl-5 = <&cdc_pdm_lines_act
+			&cdc_pdm_lines_2_act &ear_sw_fih_sus
+			&sec_tlmm_lines_act>;
+	pinctrl-6 = <&cdc_pdm_lines_sus
+			&cdc_pdm_lines_2_sus &ear_sw_fih_act
+			&sec_tlmm_lines_act>;
+	pinctrl-7 = <&cdc_pdm_lines_act
+			&cdc_pdm_lines_2_act &ear_sw_fih_act
+			&sec_tlmm_lines_act>;
+
+	/delete-property/ qcom,cdc-us-euro-gpios;
+};
+
+&pm8937_cajon_dig {
+	status = "okay";
+};
+
+&pm8937_cajon_analog {
+	status = "okay";
+};
+
+&wsa881x_i2c_e {
+	status = "disabled";
+};
+
+&wsa881x_i2c_44 {
+	status = "disabled";
+};
+
+&wsa881x_i2c_f {
+	status = "disabled";
+};
+
+&wsa881x_i2c_45 {
+	status = "disabled";
+};
+
+&soc {
+	fih_info_management {
+		acdbdir="D1C";
+	};
+};
+
+&soc {
+	tlmm: pinctrl@1000000 {
+/* quat mi2s for speaker amp mi2s */
+		sec-tlmm-lines {
+			sec_tlmm_lines_act: sec_tlmm_lines_act {
+				mux {
+					pins = "gpio94", "gpio95", "gpio12", "gpio13";
+					function = "sec_mi2s";
+				};
+
+				config {
+					pins = "gpio94", "gpio95", "gpio12", "gpio13";
+					drive-strength = <8>;
+				};
+			};
+
+			sec_tlmm_lines_sus: sec_tlmm_lines_sus {
+				mux {
+					pins = "gpio94", "gpio95", "gpio12", "gpio13";
+					function = "sec_mi2s";
+				};
+
+				config {
+					pins = "gpio94", "gpio95", "gpio12", "gpio13";
+					drive-strength = <2>;
+					bias-pull-down;
+				};
+			};
+		};
+
+		ear_sw_fih {
+			ear_sw_fih_act: lines_on {
+				mux {
+					pins = "gpio62", "gpio63";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio62", "gpio63";
+					drive-strength = <8>;
+					output-high;
+					bias-pull-down;
+				};
+			};
+
+			ear_sw_fih_sus: lines_off {
+				mux {
+					pins = "gpio62", "gpio63";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio62", "gpio63";
+					drive-strength = <2>;
+					bias-pull-down;
+				};
+			};
+		};
+	};
+};

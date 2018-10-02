@@ -34,6 +34,9 @@
 #define INPUT_EVENT_HANDLER_DELAY_USECS (16000 * 4)
 #define AUTOREFRESH_MAX_FRAME_CNT 6
 
+//Display-BBox-04+_20161227
+#define BBOX_LCM_WAIT4PINGPONG_TIMEOUT do {printk("BBox;%s: LCM wait4pingpong timeout\n", __func__); printk("BBox::UEC;0::4\n");} while (0);
+
 static DEFINE_MUTEX(cmd_clk_mtx);
 
 static DEFINE_MUTEX(cmd_off_mtx);
@@ -1206,8 +1209,7 @@ static void mdss_mdp_cmd_pingpong_done(void *arg)
 			       atomic_read(&ctx->koff_cnt));
 		if (sync_ppdone) {
 			atomic_inc(&ctx->pp_done_cnt);
-			if (!ctl->commit_in_progress)
-				schedule_work(&ctx->pp_done_work);
+			schedule_work(&ctx->pp_done_work);
 
 			mdss_mdp_resource_control(ctl,
 				MDP_RSRC_CTL_EVENT_PP_DONE);
@@ -1949,6 +1951,8 @@ static int mdss_mdp_cmd_wait4pingpong(struct mdss_mdp_ctl *ctl, void *arg)
 				__func__,
 				ctl->num, rc, ctx->pp_timeout_report_cnt,
 				atomic_read(&ctx->koff_cnt));
+
+     BBOX_LCM_WAIT4PINGPONG_TIMEOUT	//Display-BBox-04+_20161227
 
 		/* enable TE irq to check if it is coming from the panel */
 		te_irq = gpio_to_irq(pdata->panel_te_gpio);

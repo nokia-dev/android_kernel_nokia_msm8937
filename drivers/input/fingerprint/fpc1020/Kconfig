@@ -1,0 +1,9 @@
+#
+# Configuration for FPC
+#
+
+config FPC_1020
+	bool "FPC 1020 Driver" 
+	default n
+	---help---
+	  This is a FPC 1020 chipset Driver.

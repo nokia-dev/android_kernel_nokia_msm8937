@@ -103,34 +103,66 @@ cam_sensor_mclk0_sleep: cam_sensor_mclk0_sleep {
 		drive-strength = <2>; /* 2 MA */
 	};
 };
-
-cam_sensor_rear_default: cam_sensor_rear_default {
-	/* RESET, STANDBY */
+/*MM-JW-MainCamPorting-00 *{*/
+/*MM-JW-MainCamPorting-4 *{*/
+cam_sensor_rear_af_default: cam_sensor_af_rear_default {
+	/* RESET */
 	mux {
-		pins = "gpio36", "gpio35";
+		pins = "gpio27";
 		function = "gpio";
 	};
 
 	config {
-		pins = "gpio36","gpio35";
+		pins = "gpio27";
 		bias-disable; /* No PULL */
 		drive-strength = <2>; /* 2 MA */
 	};
+
+};
+
+cam_sensor_rear_af_sleep: cam_sensor_af_rear_sleep {
+	/* RESET */
+	mux {
+		pins = "gpio27";
+		function = "gpio";
+	};
+
+	config {
+		pins = "gpio27";
+		bias-disable; /* No PULL */
+		drive-strength = <2>; /* 2 MA */
+	};
+};
+/*MM-JW-MainCamPorting-4 *}*/
+cam_sensor_rear_default: cam_sensor_rear_default {
+	/* RESET */
+	mux {
+		pins = "gpio36";
+		function = "gpio";
+	};
+
+	config {
+		pins = "gpio36";
+		bias-disable; /* No PULL */
+		drive-strength = <2>; /* 2 MA */
+	};
+
 };
 
 cam_sensor_rear_sleep: cam_sensor_rear_sleep {
-	/* RESET, STANDBY */
+	/* RESET */
 	mux {
-		pins = "gpio36","gpio35";
+		pins = "gpio36";
 		function = "gpio";
 	};
 
 	config {
-		pins = "gpio36","gpio35";
+		pins = "gpio36";
 		bias-disable; /* No PULL */
 		drive-strength = <2>; /* 2 MA */
 	};
 };
+/*MM-JW-MainCamPorting-00 *}*/
 
 cam_sensor_rear_vdig: cam_sensor_rear_vdig {
 	/* VDIG */
@@ -189,35 +221,36 @@ cam_sensor_mclk1_sleep: cam_sensor_mclk1_sleep {
 		drive-strength = <2>; /* 2 MA */
 	};
 };
-
+/*MM-JW-MainCamPorting-01 *{*/
 cam_sensor_front_default: cam_sensor_front_default {
-	/* RESET, STANDBY */
+	/* RESET, VCM_PWDN */
 	mux {
-		pins = "gpio38","gpio50";
+		pins = "gpio40";
 		function = "gpio";
 	};
 
 	config {
-		pins = "gpio38","gpio50";
+		pins = "gpio40";
 		bias-disable; /* No PULL */
 		drive-strength = <2>; /* 2 MA */
 	};
 };
+
 
 cam_sensor_front_sleep: cam_sensor_front_sleep {
-	/* RESET, STANDBY */
+	/* RESET, VCM_PWDN */
 	mux {
-		pins = "gpio38","gpio50";
+		pins = "gpio40";
 		function = "gpio";
 	};
 
 	config {
-		pins = "gpio38","gpio50";
+		pins = "gpio40";
 		bias-disable; /* No PULL */
 		drive-strength = <2>; /* 2 MA */
 	};
 };
-
+/*MM-JW-MainCamPorting-01 *}*/
 cam_sensor_mclk2_default: cam_sensor_mclk2_default {
 	/* MCLK2 */
 	mux {

@@ -851,6 +851,7 @@ static void handle_critical_trips(struct thermal_zone_device *tz,
 		dev_emerg(&tz->device,
 			  "critical temperature reached(%d C),shutting down\n",
 			  tz->temperature / 1000);
+		printk("BBox::UEC;22::9\n");	  
 		orderly_poweroff(true);
 	}
 }

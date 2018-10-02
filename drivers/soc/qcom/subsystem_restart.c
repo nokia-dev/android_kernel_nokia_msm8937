@@ -28,6 +28,9 @@
 #include <linux/spinlock.h>
 #include <linux/device.h>
 #include <linux/idr.h>
+#ifdef CONFIG_FIH_DEBUG_FS_SUBSYS
+#include <linux/debugfs.h>
+#endif
 #include <linux/interrupt.h>
 #include <linux/of_gpio.h>
 #include <linux/cdev.h>
@@ -150,6 +153,7 @@ struct restart_log {
  * @keep_alive: whether keep alive during AP's panic
  * @restart_order: order of other devices this devices restarts with
  * @crash_count: number of times the device has crashed
+ * @dentry: debugfs directory for this device
  * @do_ramdump_on_put: ramdump on subsystem_put() if true
  * @err_ready: completion variable to record error ready from subsystem
  * @crashed: indicates if subsystem has crashed
@@ -173,6 +177,9 @@ struct subsys_device {
 	bool keep_alive;
 	int crash_count;
 	struct subsys_soc_restart_order *restart_order;
+#ifdef CONFIG_FIH_DEBUG_FS_SUBSYS
+	struct dentry *dentry;
+#endif
 	bool do_ramdump_on_put;
 	struct cdev char_dev;
 	dev_t dev_no;
@@ -181,6 +188,10 @@ struct subsys_device {
 	int notif_state;
 	struct list_head list;
 };
+
+#define MAX_SSR_REASON_LEN 81U
+extern char fih_failure_reason[MAX_SSR_REASON_LEN];
+bool disable_MDM_RamDump;
 
 static struct subsys_device *to_subsys(struct device *d)
 {
@@ -537,6 +548,12 @@ static void notify_each_subsys_device(struct subsys_device **list,
 		enum subsys_notif_type notif, void *data)
 {
 	struct subsys_device *subsys;
+	int isFTMMode = 0;
+
+	if (strstr(saved_command_line, "androidboot.mode=2")!=NULL)
+		isFTMMode = 1;
+	else
+		isFTMMode = 0;
 
 	while (count--) {
 		struct subsys_device *dev = *list++;
@@ -563,7 +580,12 @@ static void notify_each_subsys_device(struct subsys_device **list,
 			send_sysmon_notif(dev);
 
 		notif_data.crashed = subsys_get_crash_status(dev);
+		
+		if (((strcmp(dev->desc->name, "modem") == 0) && disable_MDM_RamDump) || (isFTMMode && !(strcmp(dev->desc->name, "modem") == 0)))
+			notif_data.enable_ramdump = 0;
+		else
 		notif_data.enable_ramdump = is_ramdump_enabled(dev);
+		
 		notif_data.enable_mini_ramdumps = enable_mini_ramdumps;
 		notif_data.no_auth = dev->desc->no_auth;
 		notif_data.pdev = pdev;
@@ -658,8 +680,13 @@ static int subsystem_shutdown(struct subsys_device *dev, void *data)
 static int subsystem_ramdump(struct subsys_device *dev, void *data)
 {
 	const char *name = dev->desc->name;
+	int isFTMMode = 0;
+	if (strstr(saved_command_line, "androidboot.mode=2")!=NULL)
+		isFTMMode = 1;
+	else
+		isFTMMode = 0;
 
-	if (dev->desc->ramdump)
+	if (dev->desc->ramdump && ((((strcmp(name, "modem") == 0) && !disable_MDM_RamDump)) || (!isFTMMode && !(strcmp(name, "modem") == 0))))
 		if (dev->desc->ramdump(is_ramdump_enabled(dev), dev->desc) < 0)
 			pr_warn("%s[%s:%d]: Ramdump failed.\n",
 				name, current->comm, current->pid);
@@ -993,9 +1020,16 @@ static void subsystem_restart_wq_func(struct work_struct *work)
 	 * changed until _this_ restart sequence completes.
 	 */
 	mutex_lock(&soc_order_reg_lock);
-
 	pr_debug("[%s:%d]: Starting restart sequence for %s\n",
 			current->comm, current->pid, desc->name);
+	if ( (strcmp(desc->name, "modem") == 0) && enable_ramdumps ){
+		if (strstr(fih_failure_reason, "diagoem.c") != NULL || strstr(fih_failure_reason, "fih_qmi_svc.c") != NULL || strstr(fih_failure_reason, "IMS NV FUNCTION SSR triggle") != NULL){
+  		disable_MDM_RamDump = true;
+		}
+		pr_debug("[%p]: disable_MDM_RamDump = %s, fih_failure_reason = %s.\n", current, (disable_MDM_RamDump?"TRUE":"FALSE"), fih_failure_reason);
+	}
+	else
+		disable_MDM_RamDump = false;
 	notify_each_subsys_device(list, count, SUBSYS_BEFORE_SHUTDOWN, NULL);
 	ret = for_each_subsys_device(list, count, NULL, subsystem_shutdown);
 	if (ret)
@@ -1022,6 +1056,10 @@ static void subsystem_restart_wq_func(struct work_struct *work)
 
 	pr_info("[%s:%d]: Restart sequence for %s completed.\n",
 			current->comm, current->pid, desc->name);
+	if ( strcmp(desc->name, "modem") == 0 ){
+		disable_MDM_RamDump = false;
+		pr_debug("[%p]: disable_MDM_RamDump = %s.\n", current, (disable_MDM_RamDump?"TRUE":"FALSE"));
+	}
 
 err:
 	/* Reset subsys count */
@@ -1224,6 +1262,82 @@ void notify_proxy_unvote(struct device *device)
 	if (dev)
 		notify_each_subsys_device(&dev, 1, SUBSYS_PROXY_UNVOTE, NULL);
 }
+
+#ifdef CONFIG_FIH_DEBUG_FS_SUBSYS
+static ssize_t subsys_debugfs_read(struct file *filp, char __user *ubuf,
+		size_t cnt, loff_t *ppos)
+{
+	int r;
+	char buf[40];
+	struct subsys_device *subsys = filp->private_data;
+
+	r = snprintf(buf, sizeof(buf), "%d\n", subsys->count);
+	return simple_read_from_buffer(ubuf, cnt, ppos, buf, r);
+}
+
+static ssize_t subsys_debugfs_write(struct file *filp,
+		const char __user *ubuf, size_t cnt, loff_t *ppos)
+{
+	struct subsys_device *subsys = filp->private_data;
+	char buf[10];
+	char *cmp;
+
+	cnt = min(cnt, sizeof(buf) - 1);
+	if (copy_from_user(&buf, ubuf, cnt))
+		return -EFAULT;
+	buf[cnt] = '\0';
+	cmp = strstrip(buf);
+
+	if (!strcmp(cmp, "restart")) {
+		if (subsystem_restart_dev(subsys))
+			return -EIO;
+	} else if (!strcmp(cmp, "get")) {
+		if (subsystem_get(subsys->desc->name))
+			return -EIO;
+	} else if (!strcmp(cmp, "put")) {
+		subsystem_put(subsys);
+	} else {
+		return -EINVAL;
+	}
+
+	return cnt;
+}
+
+static const struct file_operations subsys_debugfs_fops = {
+	.open	= simple_open,
+	.read	= subsys_debugfs_read,
+	.write	= subsys_debugfs_write,
+};
+
+static struct dentry *subsys_base_dir;
+
+static int __init subsys_debugfs_init(void)
+{
+	subsys_base_dir = debugfs_create_dir("msm_subsys", NULL);
+	return !subsys_base_dir ? -ENOMEM : 0;
+}
+
+static void subsys_debugfs_exit(void)
+{
+	debugfs_remove_recursive(subsys_base_dir);
+}
+
+static int subsys_debugfs_add(struct subsys_device *subsys)
+{
+	if (!subsys_base_dir)
+		return -ENOMEM;
+
+	subsys->dentry = debugfs_create_file(subsys->desc->name,
+				S_IRUGO | S_IWUSR, subsys_base_dir,
+				subsys, &subsys_debugfs_fops);
+	return !subsys->dentry ? -ENOMEM : 0;
+}
+
+static void subsys_debugfs_remove(struct subsys_device *subsys)
+{
+	debugfs_remove(subsys->dentry);
+}
+#endif
 
 static int subsys_device_open(struct inode *inode, struct file *file)
 {
@@ -1664,6 +1778,12 @@ struct subsys_device *subsys_register(struct subsys_desc *desc)
 
 	mutex_init(&subsys->track.lock);
 
+#ifdef CONFIG_FIH_DEBUG_FS_SUBSYS
+	ret = subsys_debugfs_add(subsys);
+	if (ret)
+		goto err_debugfs;
+#endif
+
 	ret = device_register(&subsys->dev);
 	if (ret) {
 		put_device(&subsys->dev);
@@ -1727,6 +1847,10 @@ err_setup_irqs:
 	if (ofnode)
 		subsys_remove_restart_order(ofnode);
 err_register:
+#ifdef CONFIG_FIH_DEBUG_FS_SUBSYS
+	subsys_debugfs_remove(subsys);
+err_debugfs:
+#endif
 	device_unregister(&subsys->dev);
 	return ERR_PTR(ret);
 }
@@ -1755,6 +1879,9 @@ void subsys_unregister(struct subsys_device *subsys)
 		WARN_ON(subsys->count);
 		device_unregister(&subsys->dev);
 		mutex_unlock(&subsys->track.lock);
+#ifdef CONFIG_FIH_DEBUG_FS_SUBSYS
+		subsys_debugfs_remove(subsys);
+#endif
 		subsys_char_device_remove(subsys);
 		sysmon_notifier_unregister(subsys->desc);
 		if (subsys->desc->edge)
@@ -1801,6 +1928,12 @@ static int __init subsys_restart_init(void)
 	if (ret)
 		goto err_bus;
 
+#ifdef CONFIG_FIH_DEBUG_FS_SUBSYS
+	ret = subsys_debugfs_init();
+	if (ret)
+		goto err_debugfs;
+#endif
+
 	char_class = class_create(THIS_MODULE, "subsys");
 	if (IS_ERR(char_class)) {
 		ret = -ENOMEM;
@@ -1818,6 +1951,10 @@ static int __init subsys_restart_init(void)
 err_soc:
 	class_destroy(char_class);
 err_class:
+#ifdef CONFIG_FIH_DEBUG_FS_SUBSYS
+	subsys_debugfs_exit();
+err_debugfs:
+#endif
 	bus_unregister(&subsys_bus_type);
 err_bus:
 	destroy_workqueue(ssr_wq);

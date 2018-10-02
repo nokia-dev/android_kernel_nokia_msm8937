@@ -1,0 +1,246 @@
+/*
+ * Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+#include "msm8937-pinctrl-D1C.dtsi"
+#include "components/camera/msm8937-camera-sensor-d1c_evt.dtsi"
+
+/* Reserved memory hole */
+#include "components/memmap/memmap_8937_v0.dtsi"
+
+/* Pstore:last kmsg */
+#include "components/memmap/msm8937-memory-pstore.dtsi"
+
+/* Disable Vendor partition */
+&firmware {
+  android {
+    fstab {
+      vendor {
+        status = "disabled";
+      };
+      system {
+        fsmgr_flags = "wait,verify";
+        status = "ok";
+      };
+    };
+  };
+};
+
+&wled {
+	qcom,cons-sync-write-delay-us = <1000>;
+};
+
+&soc {
+
+  /include/ "components/fih/common_info_msm8976_v1.dtsi"
+
+  /*Win Add for FPC fingerprint */
+  /include/ "components/fingerprint/FP_Goodix_TEE_V0.dtsi"
+
+  /* Win Add for external LDO control */
+  /include/ "components/ext-reguator/fixed-regulator-EVT-v1.dtsi"
+
+	gpio_keys {
+		compatible = "gpio-keys";
+		input-name = "gpio-keys";
+		pinctrl-names = "tlmm_gpio_key_active","tlmm_gpio_key_suspend";
+		pinctrl-0 = <&gpio_key_active>;
+		pinctrl-1 = <&gpio_key_suspend>;
+
+		vol_dn {
+			label = "volume_dn";
+			gpios = <&tlmm 91 0x1>;
+			linux,input-type = <1>;
+			linux,code = <114>;
+			debounce-interval = <15>;
+		};
+	};
+
+	i2c@78b7000 {
+	  status = "ok";
+	  #include "components/touch/touch_ili2121x_v0.dtsi"
+	};
+};
+
+&blsp1_uart2 {
+	status = "ok";
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart_console_active>;
+};
+
+&pmi_haptic{
+	qcom,actuator-type = "erm";
+	qcom,vmax-mv = <3000>;
+};
+
+
+&i2c_5 { /* BLSP2 QUP1 */
+    NXP_NFC@28 {
+            compatible = "qcom,nq-nci";
+		reg = <0x28>;
+            nxp,irq-gpio = <&tlmm 17 0x00>;
+            nxp,ven-gpio = <&tlmm 16 0x00>;
+            nxp,firm-gpio = <&tlmm 130 0x00>;
+		qcom,nq-clkreq = <&pm8937_gpios 5 0x00>;
+		interrupt-parent = <&tlmm>;
+		qcom,clk-src = "BBCLK2";
+		interrupts = <17 0>;
+		interrupt-names = "nfc_irq";
+		pinctrl-names = "nfc_active", "nfc_suspend";
+		pinctrl-0 = <&nfc_int_active &nfc_disable_active>;
+		pinctrl-1 = <&nfc_int_suspend &nfc_disable_suspend>;
+		clocks = <&clock_gcc clk_bb_clk2_pin>;
+		clock-names = "ref_clk";
+	};
+};
+
+&i2c_6 { /* BLSP2 QUP1 */
+	qcom_i2c_test@34 { //Slave driver and slave Address
+		compatible ="qcom,i2c-test";//Manufacture, model
+		reg = <0x37>; //Slave Address
+		/*
+		* Following elements are optional. For more detail
+		* settings please check atmel touch screen driver
+		* or sdcc device tree.
+		*/
+		qcom_i2c_test,smartamp-i2c-data-gpio = <&tlmm 22 0>;
+		qcom_i2c_test,smartamp-i2c-clk-gpio = <&tlmm 23 0>;
+		//interrupt-parent = <&tlmm>; GPIO handler
+		//interrupts = <61 0x2>; GPIO # will be converted to gpio_irq #
+		//qcom_i2c_test,irq-gpio = <&tlmm 61 0x00>; Pass a GPIO
+	};
+};
+
+
+
+
+
+&sdhc_1 {
+	/* device core power supply */
+	vdd-supply = <&pm8937_l8>;
+	qcom,vdd-voltage-level = <2900000 2900000>;
+	qcom,vdd-current-level = <200 570000>;
+
+	/* device communication power supply */
+	vdd-io-supply = <&pm8937_l5>;
+	qcom,vdd-io-always-on;
+	qcom,vdd-io-lpm-sup;
+	qcom,vdd-io-voltage-level = <1800000 1800000>;
+	qcom,vdd-io-current-level = <200 325000>;
+
+	pinctrl-names = "active", "sleep";
+	pinctrl-0 = <&sdc1_clk_on &sdc1_cmd_on &sdc1_data_on &sdc1_rclk_on>;
+	pinctrl-1 = <&sdc1_clk_off &sdc1_cmd_off &sdc1_data_off &sdc1_rclk_off>;
+
+	qcom,clk-rates = <400000 20000000 25000000 50000000 100000000 192000000
+								384000000>;
+	qcom,nonremovable;
+	qcom,bus-speed-mode = "HS400_1p8v", "HS200_1p8v", "DDR_1p8v";
+
+	status = "ok";
+};
+
+&sdhc_2 {
+	/* device core power supply */
+	vdd-supply = <&pm8937_l11>;
+	qcom,vdd-voltage-level = <2950000 2950000>;
+	qcom,vdd-current-level = <15000 800000>;
+
+	/* device communication power supply */
+	vdd-io-supply = <&pm8937_l12>;
+	qcom,vdd-io-voltage-level = <1800000 2950000>;
+	qcom,vdd-io-current-level = <200 22000>;
+
+	pinctrl-names = "active", "sleep";
+	pinctrl-0 = <&sdc2_clk_on &sdc2_cmd_on &sdc2_data_on &sdc2_cd_on>;
+	pinctrl-1 = <&sdc2_clk_off &sdc2_cmd_off &sdc2_data_off>;
+
+	#address-cells = <0>;
+	interrupt-parent = <&sdhc_2>;
+	interrupts = <0 1 2>;
+	#interrupt-cells = <1>;
+	interrupt-map-mask = <0xffffffff>;
+	interrupt-map = <0 &intc 0 125 0
+		1 &intc 0 221 0
+		2 &tlmm 67 0>;
+	interrupt-names = "hc_irq", "pwr_irq", "status_irq";
+	cd-gpios = <&tlmm 67 0x1>;
+
+	qcom,clk-rates = <400000 20000000 25000000 50000000 100000000
+								200000000>;
+	qcom,bus-speed-mode = "SDR12", "SDR25", "SDR50", "DDR50", "SDR104";
+
+	status = "ok";
+};
+
+&pm8937_gpios {
+	gpio@c400 {
+		qcom,mode = <0>;
+		qcom,output-type = <0>;
+		qcom,pull = <0>;
+		qcom,vin-sel = <2>;
+		qcom,out-strength = <3>;
+		qcom,src-sel = <0>;
+		qcom,master-en = <1>;
+		status = "okay";
+	};
+};
+
+#include "msm8937-mdss-panels.dtsi"
+
+&mdss_mdp {
+	qcom,mdss-pref-prim-intf = "dsi";
+};
+
+&mdss_dsi {
+	hw-config = "single_dsi";
+};
+
+&mdss_dsi0 {
+	qcom,dsi-pref-prim-pan = <&fih_dsi_ili7807e_1080p_video>;
+	pinctrl-names = "mdss_default", "mdss_sleep";
+	pinctrl-0 = <&mdss_dsi_active &mdss_te_active>;
+	pinctrl-1 = <&mdss_dsi_suspend &mdss_te_suspend>;
+
+	qcom,platform-te-gpio = <&tlmm 24 0>;
+	qcom,platform-reset-gpio = <&tlmm 60 0>;
+	fih,platform-tp-1p8-en-gpio = <&tlmm 46 0>;
+	fih,platform-tp-2p8-en-gpio = <&tlmm 47 0>;
+	fih,platform-tp-reset-gpio = <&tlmm 64 0>;
+};
+
+&mdss_dsi1 {
+	status = "disabled";
+	qcom,dsi-pref-prim-pan = <&fih_dsi_ili7807e_1080p_video>;
+	pinctrl-names = "mdss_default", "mdss_sleep";
+	pinctrl-0 = <&mdss_dsi_active &mdss_te_active>;
+	pinctrl-1 = <&mdss_dsi_suspend &mdss_te_suspend>;
+
+	qcom,platform-te-gpio = <&tlmm 24 0>;
+	qcom,platform-reset-gpio = <&tlmm 60 0>;
+	fih,platform-tp-1p8-en-gpio = <&tlmm 46 0>;
+	fih,platform-tp-2p8-en-gpio = <&tlmm 47 0>;
+	fih,platform-tp-reset-gpio = <&tlmm 64 0>;
+};
+
+&fih_dsi_ili7807e_1080p_video {
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
+};
+
+/* PM8937 GPIO configuration */
+&pm8937_gpios {
+	gpio@c100 {
+		qcom,mode = <0>;
+		qcom,vin-sel = <3>;
+		status = "okay";
+	};
+};
